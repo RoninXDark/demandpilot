@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-demandpilot}
+      POSTGRES_USER: ${POSTGRES_USER:-demandpilot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-demandpilot}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-demandpilot}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DEMANDPILOT_ENVIRONMENT: docker
+      DEMANDPILOT_CORS_ORIGINS: http://localhost:8080
+      DATABASE_URL: postgresql+psycopg://demandpilot:${POSTGRES_PASSWORD:-demandpilot}@postgres:5432/demandpilot
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  frontend:
+    build:
+      context: frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:

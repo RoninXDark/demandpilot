@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "demandpilot-api"
+version = "0.1.0"
+description = "Demand forecasting and inventory optimization API"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115,<1.0",
+  "numpy>=2.0,<3.0",
+  "pandas>=2.2,<3.0",
+  "pydantic-settings>=2.7,<3.0",
+  "python-multipart>=0.0.20,<1.0",
+  "uvicorn[standard]>=0.34,<1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28,<1.0",
+  "pytest>=8.3,<9.0",
+  "pytest-cov>=6.0,<7.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --basetemp=.pytest-tmp"

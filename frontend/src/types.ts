@@ -84,4 +84,39 @@ export type ScenarioResponse = {
   demand_change_pct: number;
   recommended_order: number;
   risk: string;
+  insight: string;
+  forecast: {
+    date: string;
+    forecast: number;
+    lower: number;
+    upper: number;
+  }[];
+};
+
+export type ActionRecommendation = {
+  action_id: string;
+  product_id: string;
+  product_name: string;
+  category: string;
+  action_type: "reorder" | "markdown" | "transfer";
+  priority: "Critical" | "Planned" | "Medium";
+  title: string;
+  rationale: string;
+  recommended_quantity: number | null;
+  due_date: string;
+  estimated_impact: string;
+  confidence_pct: number;
+  status: string;
+};
+
+export type PurchaseOrderDraft = {
+  draft_id: string;
+  action_id: string;
+  product_id: string;
+  product_name: string;
+  quantity: number;
+  due_date: string;
+  status: "Draft";
+  created_at: string;
+  export_filename: string;
 };

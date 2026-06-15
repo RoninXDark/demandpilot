@@ -96,3 +96,33 @@ class ScenarioResponse(BaseModel):
     demand_change_pct: float
     recommended_order: int
     risk: str
+    insight: str
+    forecast: list[ForecastPoint]
+
+
+class ActionRecommendation(BaseModel):
+    action_id: str
+    product_id: str
+    product_name: str
+    category: str
+    action_type: str
+    priority: str
+    title: str
+    rationale: str
+    recommended_quantity: int | None = None
+    due_date: date
+    estimated_impact: str
+    confidence_pct: int
+    status: str = "Open"
+
+
+class PurchaseOrderDraft(BaseModel):
+    draft_id: str
+    action_id: str
+    product_id: str
+    product_name: str
+    quantity: int
+    due_date: date
+    status: str = "Draft"
+    created_at: datetime
+    export_filename: str

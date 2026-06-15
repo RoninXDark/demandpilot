@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from app.services.analytics import inventory_status, simulate_scenario
+from app.services.analytics import action_queue, inventory_status, simulate_scenario
 from app.services.data_service import SalesDataService
 from app.services.demo_data import generate_demo_dataset
 from app.services.forecasting import forecast_product
@@ -71,3 +71,16 @@ def test_scenario_changes_demand(tmp_path):
 
     assert result.scenario_units > result.baseline_units
     assert result.projected_revenue > 0
+    assert len(result.forecast) == request.horizon_days
+    assert result.insight
+
+
+def test_action_queue_prioritizes_operational_recommendations(tmp_path):
+    frame = build_frame(tmp_path)
+
+    actions = action_queue(frame)
+
+    assert actions
+    assert actions[0].priority == "Critical"
+    assert {"reorder", "markdown"} <= {action.action_type for action in actions}
+    assert all(action.confidence_pct > 0 for action in actions)

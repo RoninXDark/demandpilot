@@ -4,14 +4,20 @@
 
 DemandPilot is organized as a modular monorepository:
 
-- `frontend/` owns the operations dashboard and API client
+- `frontend/` owns the landing page, Inventory Control Tower, and API client
 - `backend/app/main.py` owns HTTP contracts
 - `backend/app/services/` owns data preparation, forecasting, and inventory rules
 - `data/` contains the reproducible public demo dataset
 - `data/uploads/` stores ignored runtime datasets and active-dataset metadata
 - `scripts/` contains developer and data utilities
 
-The analytics layer is deliberately independent from HTTP. Forecasting and inventory functions accept data frames and return typed domain responses, which keeps them testable and prepares them for background workers.
+The analytics layer is deliberately independent from HTTP. Forecasting, inventory, scenario, and recommendation functions accept data frames and return typed domain responses, which keeps them testable and prepares them for background workers.
+
+## Decision Layer
+
+The Action Queue translates inventory calculations into operational recommendations. Each action includes a priority, rationale, timing, confidence, quantity when relevant, and expected impact. Reorder recommendations can create a typed Draft Purchase Order response; the frontend exports that response as a portable CSV for an ERP or accounting workflow.
+
+The Phase 1 draft flow is intentionally lightweight. Approval states, supplier dispatch, receiving, and audit persistence remain future integration boundaries rather than simulated capabilities.
 
 ## Forecasting Baseline
 

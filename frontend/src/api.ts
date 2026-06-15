@@ -1,8 +1,10 @@
 import type {
+  ActionRecommendation,
   DashboardSummary,
   DatasetInfo,
   ForecastResponse,
   InventoryProduct,
+  PurchaseOrderDraft,
   ScenarioRequest,
   ScenarioResponse,
 } from "./types";
@@ -40,6 +42,11 @@ export const api = {
     request<DatasetInfo>("/datasets/reset", { method: "POST" }),
   summary: () => request<DashboardSummary>("/dashboard/summary"),
   products: () => request<InventoryProduct[]>("/products"),
+  actions: () => request<ActionRecommendation[]>("/actions"),
+  createDraft: (actionId: string) =>
+    request<PurchaseOrderDraft>(`/actions/${actionId}/draft`, {
+      method: "POST",
+    }),
   forecast: (productId: string, horizon: number) =>
     request<ForecastResponse>(`/forecast/${productId}?horizon=${horizon}`),
   scenario: (payload: ScenarioRequest) =>

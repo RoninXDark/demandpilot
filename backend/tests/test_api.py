@@ -28,6 +28,21 @@ def test_dashboard_contract():
     assert payload["revenue_by_product"]
 
 
+def test_action_queue_and_draft_contract():
+    with TestClient(app) as client:
+        response = client.get("/api/v1/actions")
+        actions = response.json()
+        reorder = next(item for item in actions if item["action_type"] == "reorder")
+        draft_response = client.post(
+            f"/api/v1/actions/{reorder['action_id']}/draft"
+        )
+
+    assert response.status_code == 200
+    assert draft_response.status_code == 200
+    assert draft_response.json()["status"] == "Draft"
+    assert draft_response.json()["quantity"] == reorder["recommended_quantity"]
+
+
 def test_dataset_import_endpoint(tmp_path: Path, monkeypatch):
     demo_path = generate_demo_dataset(tmp_path / "demo.csv", days=120)
     test_registry = DatasetRegistry(demo_path, tmp_path / "uploads")

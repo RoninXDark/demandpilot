@@ -1,33 +1,43 @@
 # DemandPilot
 
-AI-ready demand forecasting and inventory optimization platform for retail and operations teams.
+AI-powered inventory decision platform for e-commerce and operations teams.
 
-DemandPilot turns raw sales history into forecasts, stock-risk signals, replenishment recommendations, and scenario simulations. The current release includes a FastAPI analytics service, React operations dashboard, and a validated CSV/XLSX import workflow.
+DemandPilot turns sales history into a prioritized queue of replenishment and inventory actions. It combines transparent demand forecasting, scenario simulation, stock-risk detection, data-quality controls, and exportable Draft Purchase Orders in one operational workspace.
+
+![DemandPilot landing page](docs/assets/landing-preview.png)
 
 ## Business Problem
 
 Retail teams often plan inventory in spreadsheets after stockouts or excess inventory have already appeared. DemandPilot provides an earlier, measurable view of future demand:
 
+- Start every planning session with a risk-ranked Action Queue
 - Forecast demand by product over 7, 30, or 90 days
 - Compare baseline forecasting strategies through holdout validation
 - Detect products at risk of stockout or overstock
 - Calculate safety stock, reorder points, and suggested order quantities
-- Simulate price, promotion, and supplier lead-time changes
+- Simulate price, promotion, and supplier lead-time changes directly on the forecast
+- Convert replenishment recommendations into downloadable Draft PO files
 - Expose every calculation through a documented REST API
 
 ## Current Product
 
-![DemandPilot dashboard](docs/assets/dashboard-preview.png)
+## Inventory Control Tower
+
+![DemandPilot Inventory Control Tower](docs/assets/dashboard-preview.png)
 
 The repository currently contains:
 
+- A product landing page and returning-user Control Tower route
+- A prioritized recommendation engine for critical reorders, planned replenishment, and excess-stock actions
+- Action rationale, confidence, due date, quantity, and expected business impact
+- A simplified Draft Purchase Order workflow with CSV export
 - A deterministic retail dataset generator
 - Daily sales aggregation and KPI calculations
 - Seasonal-naive and trend/weekday forecasting candidates
 - Automatic model selection using holdout MAE
 - Forecast confidence ranges and WAPE reporting
 - Inventory risk and replenishment recommendations
-- Scenario simulation for pricing, promotions, and lead times
+- An integrated Scenario Lab with a live alternative forecast curve and AI insight
 - CSV/XLSX import with automatic column alias mapping
 - Data-quality reporting for rejected rows, duplicates, missing values, and defaults
 - Persistent active-dataset selection with one-click demo reset
@@ -37,11 +47,11 @@ The repository currently contains:
 ## Architecture
 
 ```text
-React + TypeScript dashboard
+React + TypeScript product experience
             |
          FastAPI
             |
-Analytics / Forecasting / Inventory services
+Recommendation / Forecasting / Inventory services
             |
 CSV/XLSX import -> validation -> normalized active dataset
 ```
@@ -104,8 +114,10 @@ Custom datasets can be imported from the dashboard. See [docs/DATA_FORMAT.md](do
 | `POST` | `/api/v1/datasets/import` | Validate and activate CSV/XLSX data |
 | `POST` | `/api/v1/datasets/reset` | Return to the reproducible demo dataset |
 | `GET` | `/api/v1/products` | Product inventory and risk table |
+| `GET` | `/api/v1/actions` | Prioritized inventory recommendation queue |
+| `POST` | `/api/v1/actions/{action_id}/draft` | Create an exportable Draft Purchase Order |
 | `GET` | `/api/v1/forecast/{product_id}` | Historical demand and selected forecast |
-| `POST` | `/api/v1/scenarios` | Price, promotion, and lead-time simulation |
+| `POST` | `/api/v1/scenarios` | Scenario metrics, AI insight, and forecast curve |
 | `GET` | `/health` | Service health |
 
 ## Roadmap
@@ -116,4 +128,4 @@ Release history is documented in [CHANGELOG.md](CHANGELOG.md).
 ## Repository Name and Description
 
 **Name:** `demandpilot`
-**GitHub description:** `AI-powered demand forecasting and inventory optimization platform with model evaluation, scenario planning, and replenishment recommendations.`
+**GitHub description:** `AI-powered inventory decision platform with demand forecasting, scenario planning, prioritized actions, and Draft PO exports.`

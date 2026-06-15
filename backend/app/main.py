@@ -1,18 +1,27 @@
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from uuid import uuid4
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.schemas import (
+    ActionRecommendation,
     DashboardSummary,
     DatasetInfo,
     ForecastResponse,
     InventoryProduct,
+    PurchaseOrderDraft,
     ScenarioRequest,
     ScenarioResponse,
 )
-from app.services.analytics import dashboard_summary, inventory_status, simulate_scenario
+from app.services.analytics import (
+    action_queue,
+    dashboard_summary,
+    inventory_status,
+    simulate_scenario,
+)
 from app.services.data_service import get_data_service
 from app.services.dataset_registry import DatasetRegistry, DatasetValidationError
 from app.services.demo_data import generate_demo_dataset
@@ -36,7 +45,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.2.0",
+    version="0.3.0",
     description="Demand forecasting and inventory decision API.",
     lifespan=lifespan,
 )
@@ -83,6 +92,47 @@ def get_dashboard_summary() -> DashboardSummary:
 @app.get(f"{settings.api_prefix}/products", response_model=list[InventoryProduct])
 def get_products() -> list[InventoryProduct]:
     return inventory_status(load_data())
+
+
+@app.get(
+    f"{settings.api_prefix}/actions",
+    response_model=list[ActionRecommendation],
+)
+def get_actions() -> list[ActionRecommendation]:
+    return action_queue(load_data())
+
+
+@app.post(
+    f"{settings.api_prefix}/actions/{{action_id}}/draft",
+    response_model=PurchaseOrderDraft,
+)
+def create_purchase_order_draft(action_id: str) -> PurchaseOrderDraft:
+    recommendation = next(
+        (item for item in action_queue(load_data()) if item.action_id == action_id),
+        None,
+    )
+    if recommendation is None:
+        raise HTTPException(status_code=404, detail="Recommendation not found")
+    if (
+        recommendation.action_type != "reorder"
+        or recommendation.recommended_quantity is None
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Only reorder recommendations can create purchase order drafts.",
+        )
+
+    draft_id = f"PO-{uuid4().hex[:8].upper()}"
+    return PurchaseOrderDraft(
+        draft_id=draft_id,
+        action_id=recommendation.action_id,
+        product_id=recommendation.product_id,
+        product_name=recommendation.product_name,
+        quantity=recommendation.recommended_quantity,
+        due_date=recommendation.due_date,
+        created_at=datetime.now(timezone.utc),
+        export_filename=f"{draft_id.lower()}-{recommendation.product_id}.csv",
+    )
 
 
 @app.get(

@@ -18,7 +18,17 @@
 - [x] Dashboard dataset controls and quality summary
 - [ ] PostgreSQL schema and Alembic migrations
 
-## Sprint 3 - Forecasting Lab
+## Sprint 3 - Inventory Control Tower
+
+- [x] Product landing page and returning-user demo route
+- [x] Prioritized Action Queue
+- [x] Critical and planned replenishment recommendations
+- [x] Excess-stock markdown recommendations
+- [x] Integrated scenario forecast curve and AI insight
+- [x] Draft Purchase Order generation and CSV export
+- [x] Collapsible desktop and compact mobile navigation
+
+## Sprint 4 - Forecasting Lab
 
 - [ ] Organization, location, and product management
 - [ ] Background import and forecast jobs with Redis
@@ -29,15 +39,15 @@
 - [ ] Holidays, promotions, prices, and external regressors
 - [ ] MLflow experiment tracking and model registry
 
-## Sprint 4 - Inventory Optimization
+## Sprint 5 - Inventory Optimization
 
 - [ ] Service-level policies
 - [ ] Supplier calendars and minimum order quantities
 - [ ] Economic order quantity and carrying cost
 - [ ] Multi-location stock transfers
-- [ ] Purchase-order recommendation workflow
+- [ ] Purchase-order approvals, supplier dispatch, and in-transit tracking
 
-## Sprint 5 - SaaS and Intelligence
+## Sprint 6 - SaaS and Intelligence
 
 - [ ] Authentication, teams, and role-based access
 - [ ] Scheduled reports and email/Telegram alerts

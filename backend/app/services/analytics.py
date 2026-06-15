@@ -1,9 +1,11 @@
 import math
+from datetime import date, timedelta
 
 import numpy as np
 import pandas as pd
 
 from app.schemas import (
+    ActionRecommendation,
     DashboardMetric,
     DashboardSummary,
     InventoryProduct,
@@ -146,6 +148,7 @@ def simulate_scenario(frame: pd.DataFrame, request: ScenarioRequest) -> Scenario
     price_multiplier = 1 + request.price_change_pct / 100
     demand_price_effect = max(0.25, 1 - 1.2 * request.price_change_pct / 100)
     promotion_effect = 1 + request.promotion_lift_pct / 100
+    demand_multiplier = demand_price_effect * promotion_effect
     scenario_units = baseline_units * demand_price_effect * promotion_effect
 
     product = frame.loc[frame["product_id"] == request.product_id]
@@ -161,16 +164,101 @@ def simulate_scenario(frame: pd.DataFrame, request: ScenarioRequest) -> Scenario
     target_stock = math.ceil(avg_daily * (request.lead_time_days + 21) * 1.2)
     recommended_order = max(0, target_stock - current_stock)
     risk = "Stockout risk" if current_stock < reorder_point else "Healthy"
+    change_pct = (
+        ((scenario_units / baseline_units) - 1) * 100 if baseline_units else 0
+    )
+    direction = "increase" if change_pct >= 0 else "decrease"
+    insight = (
+        f"Demand is projected to {direction} by {abs(change_pct):.1f}%. "
+        f"Keep {recommended_order:,} units in the replenishment plan "
+        f"for a {request.lead_time_days}-day supplier lead time."
+    )
 
     return ScenarioResponse(
         product_id=request.product_id,
         baseline_units=round(baseline_units, 1),
         scenario_units=round(scenario_units, 1),
         projected_revenue=round(scenario_units * base_price * price_multiplier, 2),
-        demand_change_pct=round(
-            ((scenario_units / baseline_units) - 1) * 100 if baseline_units else 0,
-            1,
-        ),
+        demand_change_pct=round(change_pct, 1),
         recommended_order=recommended_order,
         risk=risk,
+        insight=insight,
+        forecast=[
+            point.model_copy(
+                update={
+                    "forecast": round(point.forecast * demand_multiplier, 1),
+                    "lower": round(point.lower * demand_multiplier, 1),
+                    "upper": round(point.upper * demand_multiplier, 1),
+                }
+            )
+            for point in forecast.forecast
+        ],
+    )
+
+
+def action_queue(frame: pd.DataFrame) -> list[ActionRecommendation]:
+    as_of = max(frame["date"].max().date(), date.today())
+    recommendations: list[ActionRecommendation] = []
+
+    for product in inventory_status(frame):
+        if product.risk == "Overstock":
+            excess_cover = max(0, round(product.days_of_cover - 45))
+            recommendations.append(
+                ActionRecommendation(
+                    action_id=f"markdown-{product.product_id}",
+                    product_id=product.product_id,
+                    product_name=product.product_name,
+                    category=product.category,
+                    action_type="markdown",
+                    priority="Medium",
+                    title="Reduce price by 10%",
+                    rationale=(
+                        f"{product.days_of_cover:.0f} days of cover is tying up "
+                        "working capital above the target range."
+                    ),
+                    due_date=as_of + timedelta(days=5),
+                    estimated_impact=f"Release about {excess_cover} days of excess stock",
+                    confidence_pct=88,
+                )
+            )
+            continue
+
+        if product.recommended_order <= 0:
+            continue
+
+        critical = product.risk == "Stockout risk"
+        priority = "Critical" if critical else "Planned"
+        due_days = 1 if critical else max(3, min(10, int(product.days_of_cover / 2)))
+        recommendations.append(
+            ActionRecommendation(
+                action_id=f"reorder-{product.product_id}",
+                product_id=product.product_id,
+                product_name=product.product_name,
+                category=product.category,
+                action_type="reorder",
+                priority=priority,
+                title=(
+                    "Create replenishment order now"
+                    if critical
+                    else "Schedule the next replenishment"
+                ),
+                rationale=(
+                    f"Only {product.days_of_cover:.1f} days of cover remain "
+                    f"against a reorder point of {product.reorder_point:,} units."
+                ),
+                recommended_quantity=product.recommended_order,
+                due_date=as_of + timedelta(days=due_days),
+                estimated_impact=(
+                    "Avoid projected stockout"
+                    if critical
+                    else "Protect the next 30-day service level"
+                ),
+                confidence_pct=94 if critical else 86,
+            )
+        )
+
+    priority_order = {"Critical": 0, "Planned": 1, "Medium": 2}
+    return sorted(
+        recommendations,
+        key=lambda item: (priority_order.get(item.priority, 9), item.due_date),
     )

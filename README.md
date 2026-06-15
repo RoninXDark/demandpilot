@@ -2,7 +2,7 @@
 
 AI-ready demand forecasting and inventory optimization platform for retail and operations teams.
 
-DemandPilot turns raw sales history into forecasts, stock-risk signals, replenishment recommendations, and scenario simulations. The first release is a working vertical slice with a FastAPI analytics service and a React operations dashboard.
+DemandPilot turns raw sales history into forecasts, stock-risk signals, replenishment recommendations, and scenario simulations. The current release includes a FastAPI analytics service, React operations dashboard, and a validated CSV/XLSX import workflow.
 
 ## Business Problem
 
@@ -28,6 +28,9 @@ The repository currently contains:
 - Forecast confidence ranges and WAPE reporting
 - Inventory risk and replenishment recommendations
 - Scenario simulation for pricing, promotions, and lead times
+- CSV/XLSX import with automatic column alias mapping
+- Data-quality reporting for rejected rows, duplicates, missing values, and defaults
+- Persistent active-dataset selection with one-click demo reset
 - Responsive React dashboard backed by live API data
 - Backend tests, frontend production build, Docker, and CI
 
@@ -40,14 +43,14 @@ React + TypeScript dashboard
             |
 Analytics / Forecasting / Inventory services
             |
-CSV demo source -> PostgreSQL persistence in Sprint 2
+CSV/XLSX import -> validation -> normalized active dataset
 ```
 
-PostgreSQL and Redis services are included in the local stack so the persistence and background-job layers can be added without restructuring the product.
+PostgreSQL and Redis services are included in the local stack so account-level persistence and background forecast jobs can be added without restructuring the product.
 
 ## Tech Stack
 
-**Backend:** Python, FastAPI, pandas, NumPy, Pydantic
+**Backend:** Python, FastAPI, pandas, NumPy, Pydantic, openpyxl
 **Frontend:** React, TypeScript, Vite, Recharts, Lucide
 **Infrastructure:** Docker Compose, PostgreSQL, Redis, GitHub Actions
 **Testing:** pytest, FastAPI TestClient, TypeScript compiler
@@ -90,11 +93,16 @@ The demo CSV is generated automatically on first backend startup. It can also be
 python scripts/generate_demo_data.py
 ```
 
+Custom datasets can be imported from the dashboard. See [docs/DATA_FORMAT.md](docs/DATA_FORMAT.md) for required fields, aliases, defaults, and validation rules.
+
 ## API
 
 | Method | Endpoint | Purpose |
 |---|---|---|
 | `GET` | `/api/v1/dashboard/summary` | Portfolio KPIs and product revenue |
+| `GET` | `/api/v1/datasets/active` | Active dataset and quality report |
+| `POST` | `/api/v1/datasets/import` | Validate and activate CSV/XLSX data |
+| `POST` | `/api/v1/datasets/reset` | Return to the reproducible demo dataset |
 | `GET` | `/api/v1/products` | Product inventory and risk table |
 | `GET` | `/api/v1/forecast/{product_id}` | Historical demand and selected forecast |
 | `POST` | `/api/v1/scenarios` | Price, promotion, and lead-time simulation |
@@ -103,6 +111,7 @@ python scripts/generate_demo_data.py
 ## Roadmap
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for the full product plan.
+Release history is documented in [CHANGELOG.md](CHANGELOG.md).
 
 ## Repository Name and Description
 

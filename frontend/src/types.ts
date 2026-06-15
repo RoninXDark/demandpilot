@@ -18,6 +18,28 @@ export type DashboardSummary = {
   revenue_by_product: ProductRevenue[];
 };
 
+export type DataQualityReport = {
+  row_count: number;
+  accepted_rows: number;
+  rejected_rows: number;
+  duplicate_rows: number;
+  missing_values: number;
+  unique_products: number;
+  unique_stores: number;
+  date_start: string;
+  date_end: string;
+  warnings: string[];
+};
+
+export type DatasetInfo = {
+  dataset_id: string;
+  name: string;
+  filename: string;
+  source: "demo" | "upload";
+  activated_at: string;
+  quality: DataQualityReport;
+};
+
 export type InventoryProduct = {
   product_id: string;
   product_name: string;

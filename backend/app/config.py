@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     cors_origins: str = "http://localhost:5173,http://localhost:8080"
     data_path: Path = REPOSITORY_ROOT / "data" / "sample_sales.csv"
+    uploads_path: Path = REPOSITORY_ROOT / "data" / "uploads"
+    max_upload_bytes: int = 10 * 1024 * 1024
 
     model_config = SettingsConfigDict(
         env_file=REPOSITORY_ROOT / ".env",

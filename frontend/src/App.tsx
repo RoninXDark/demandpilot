@@ -3,12 +3,19 @@ import {
   AlertTriangle,
   BarChart3,
   Boxes,
+  CheckCircle2,
   ChevronDown,
   CircleGauge,
+  Database,
+  FileSpreadsheet,
   FlaskConical,
+  LoaderCircle,
   RefreshCw,
+  RotateCcw,
   Sparkles,
   TrendingUp,
+  Upload,
+  X,
 } from "lucide-react";
 import {
   Area,
@@ -26,6 +33,7 @@ import { api } from "./api";
 import type {
   DashboardMetric,
   DashboardSummary,
+  DatasetInfo,
   ForecastResponse,
   InventoryProduct,
   ScenarioResponse,
@@ -83,17 +91,24 @@ export default function App() {
   const [leadTime, setLeadTime] = useState(7);
   const [scenario, setScenario] = useState<ScenarioResponse | null>(null);
   const [activeSection, setActiveSection] = useState("overview");
+  const [dataset, setDataset] = useState<DatasetInfo | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [importResult, setImportResult] = useState<DatasetInfo | null>(null);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [summaryData, productData] = await Promise.all([
+      const [summaryData, productData, datasetData] = await Promise.all([
         api.summary(),
         api.products(),
+        api.activeDataset(),
       ]);
       setSummary(summaryData);
       setProducts(productData);
+      setDataset(datasetData);
       if (productData.length && !productData.some((item) => item.product_id === selectedProduct)) {
         setSelectedProduct(productData[0].product_id);
       }
@@ -150,6 +165,48 @@ export default function App() {
       lead_time_days: leadTime,
     });
     setScenario(result);
+  }
+
+  async function importDataset() {
+    if (!selectedFile) return;
+    setUploading(true);
+    setError("");
+    try {
+      const result = await api.importDataset(selectedFile);
+      setDataset(result);
+      setImportResult(result);
+      setSelectedFile(null);
+      setScenario(null);
+      await loadDashboard();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Import failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function resetDataset() {
+    setUploading(true);
+    setError("");
+    try {
+      const result = await api.resetDataset();
+      setDataset(result);
+      setImportResult(result);
+      setSelectedFile(null);
+      setScenario(null);
+      await loadDashboard();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Reset failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function openImport() {
+    setError("");
+    setImportResult(dataset);
+    setSelectedFile(null);
+    setImportOpen(true);
   }
 
   function exportInventory() {
@@ -224,17 +281,29 @@ export default function App() {
             <FlaskConical size={18} />
             <span>Scenarios</span>
           </a>
+          <button className="nav-item" title="Import data" onClick={openImport}>
+            <Upload size={18} />
+            <span>Import data</span>
+          </button>
         </nav>
       </aside>
 
       <main>
         <header className="topbar">
           <div>
-            <p className="eyebrow">OPERATIONS / DEMO RETAIL</p>
+            <p className="eyebrow">
+              OPERATIONS / {dataset?.source === "upload" ? "CUSTOM DATASET" : "DEMO RETAIL"}
+            </p>
             <h1>Demand control room</h1>
           </div>
           <div className="topbar-actions">
-            <span className="status-dot">Live data</span>
+            <span className="status-dot">
+              {dataset?.source === "upload" ? "Uploaded data" : "Demo data"}
+            </span>
+            <button className="data-button" onClick={openImport}>
+              <Upload size={16} />
+              Import
+            </button>
             <button className="icon-button" onClick={() => void loadDashboard()} title="Refresh data">
               <RefreshCw size={18} className={loading ? "spin" : ""} />
             </button>
@@ -255,6 +324,40 @@ export default function App() {
             </div>
           </section>
 
+          {dataset && (
+            <section className="data-strip" aria-label="Active dataset">
+              <div className="dataset-identity">
+                <span className="dataset-icon"><Database size={18} /></span>
+                <div>
+                  <strong>{dataset.name}</strong>
+                  <span>{dataset.filename}</span>
+                </div>
+              </div>
+              <dl>
+                <div>
+                  <dt>Rows</dt>
+                  <dd>{dataset.quality.accepted_rows.toLocaleString()}</dd>
+                </div>
+                <div>
+                  <dt>Products</dt>
+                  <dd>{dataset.quality.unique_products}</dd>
+                </div>
+                <div>
+                  <dt>Stores</dt>
+                  <dd>{dataset.quality.unique_stores}</dd>
+                </div>
+                <div>
+                  <dt>Date range</dt>
+                  <dd className="date-range">
+                    <span>{dataset.quality.date_start}</span>
+                    <span>{dataset.quality.date_end}</span>
+                  </dd>
+                </div>
+              </dl>
+              <button className="text-button" onClick={openImport}>Manage data</button>
+            </section>
+          )}
+
           <section className="metrics-grid">
             {summary?.metrics.map((metric, index) => (
               <MetricTile key={metric.label} metric={metric} index={index} />
@@ -268,7 +371,7 @@ export default function App() {
                   <h2>Demand forecast</h2>
                   <p>
                     {forecast
-                      ? `${forecast.model_name} · MAE ${forecast.validation_mae}`
+                      ? `${forecast.model_name} | MAE ${forecast.validation_mae}`
                       : "Loading model"}
                   </p>
                 </div>
@@ -423,6 +526,114 @@ export default function App() {
           </section>
         </div>
       </main>
+
+      {importOpen && (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            className="import-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="import-title"
+          >
+            <header>
+              <div>
+                <p className="eyebrow">DATA WORKSPACE</p>
+                <h2 id="import-title">Import sales history</h2>
+              </div>
+              <button className="icon-button" title="Close" onClick={() => setImportOpen(false)}>
+                <X size={18} />
+              </button>
+            </header>
+
+            {error && <div className="modal-error">{error}</div>}
+
+            <label className={`upload-zone ${selectedFile ? "has-file" : ""}`}>
+              <input
+                type="file"
+                accept=".csv,.xlsx"
+                onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+              />
+              {selectedFile ? <CheckCircle2 size={28} /> : <FileSpreadsheet size={28} />}
+              <strong>{selectedFile?.name ?? "Choose a CSV or XLSX file"}</strong>
+              <span>
+                Required: date, product_id, units_sold, unit_price. Maximum 10 MB.
+              </span>
+            </label>
+
+            {importResult && (
+              <div className="quality-report">
+                <div className="quality-heading">
+                  <div>
+                    <h3>Data quality</h3>
+                    <p>
+                      {importResult.source === "demo"
+                        ? "Demo dataset active"
+                        : "Imported dataset active"}
+                    </p>
+                  </div>
+                  <span className="quality-status">
+                    <CheckCircle2 size={15} />
+                    Ready
+                  </span>
+                </div>
+                <dl className="quality-grid">
+                  <div>
+                    <dt>Accepted</dt>
+                    <dd>{importResult.quality.accepted_rows.toLocaleString()}</dd>
+                  </div>
+                  <div>
+                    <dt>Rejected</dt>
+                    <dd>{importResult.quality.rejected_rows}</dd>
+                  </div>
+                  <div>
+                    <dt>Duplicates</dt>
+                    <dd>{importResult.quality.duplicate_rows}</dd>
+                  </div>
+                  <div>
+                    <dt>Missing values</dt>
+                    <dd>{importResult.quality.missing_values}</dd>
+                  </div>
+                </dl>
+                {importResult.quality.warnings.length > 0 && (
+                  <ul className="quality-warnings">
+                    {importResult.quality.warnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            <footer>
+              <button
+                className="secondary-button"
+                onClick={() => void resetDataset()}
+                disabled={uploading || dataset?.source === "demo"}
+              >
+                <RotateCcw size={16} />
+                Use demo data
+              </button>
+              <div>
+                <button className="text-button" onClick={() => setImportOpen(false)}>
+                  Close
+                </button>
+                <button
+                  className="primary-button"
+                  onClick={() => void importDataset()}
+                  disabled={!selectedFile || uploading}
+                >
+                  {uploading ? (
+                    <LoaderCircle size={17} className="spin" />
+                  ) : (
+                    <Upload size={17} />
+                  )}
+                  Import and activate
+                </button>
+              </div>
+            </footer>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

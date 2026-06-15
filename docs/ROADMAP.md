@@ -12,14 +12,17 @@
 
 ## Sprint 2 - Data Platform
 
+- [x] CSV/XLSX upload with alias mapping and validation
+- [x] Data-quality reports and canonical normalization
+- [x] Persistent active dataset and demo reset
+- [x] Dashboard dataset controls and quality summary
 - [ ] PostgreSQL schema and Alembic migrations
-- [ ] CSV/XLSX upload with mapping and validation
-- [ ] Organization, location, and product management
-- [ ] Background import jobs with Redis
-- [ ] Saved forecast runs and data-quality reports
 
 ## Sprint 3 - Forecasting Lab
 
+- [ ] Organization, location, and product management
+- [ ] Background import and forecast jobs with Redis
+- [ ] Saved forecast runs and dataset versioning
 - [ ] Rolling-origin backtesting
 - [ ] SARIMA, LightGBM, and intermittent-demand models
 - [ ] Hierarchical forecasts across product and location

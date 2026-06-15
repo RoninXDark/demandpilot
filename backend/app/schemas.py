@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
@@ -21,6 +21,28 @@ class DashboardSummary(BaseModel):
     as_of: date
     metrics: list[DashboardMetric]
     revenue_by_product: list[ProductRevenue]
+
+
+class DataQualityReport(BaseModel):
+    row_count: int
+    accepted_rows: int
+    rejected_rows: int
+    duplicate_rows: int
+    missing_values: int
+    unique_products: int
+    unique_stores: int
+    date_start: date
+    date_end: date
+    warnings: list[str] = Field(default_factory=list)
+
+
+class DatasetInfo(BaseModel):
+    dataset_id: str
+    name: str
+    filename: str
+    source: str
+    activated_at: datetime
+    quality: DataQualityReport
 
 
 class InventoryProduct(BaseModel):

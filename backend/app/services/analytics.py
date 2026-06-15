@@ -102,7 +102,9 @@ def inventory_status(frame: pd.DataFrame) -> list[InventoryProduct]:
         recent = product.loc[product["date"] >= recent_start]
         daily = recent.groupby("date")["units_sold"].sum()
 
-        current_stock = int(latest["stock_on_hand"].sum())
+        current_stock = int(
+            latest.groupby("store_id")["stock_on_hand"].max().sum()
+        )
         avg_daily = float(daily.mean()) if not daily.empty else 0.0
         demand_std = float(daily.std(ddof=0)) if len(daily) > 1 else 0.0
         lead_time = int(round(float(latest["lead_time_days"].median())))
@@ -150,8 +152,9 @@ def simulate_scenario(frame: pd.DataFrame, request: ScenarioRequest) -> Scenario
     if product.empty:
         raise KeyError(request.product_id)
     base_price = float(product["unit_price"].median())
+    latest = product.loc[product["date"] == product["date"].max()]
     current_stock = int(
-        product.loc[product["date"] == product["date"].max(), "stock_on_hand"].sum()
+        latest.groupby("store_id")["stock_on_hand"].max().sum()
     )
     avg_daily = scenario_units / request.horizon_days
     reorder_point = math.ceil(avg_daily * request.lead_time_days * 1.2)

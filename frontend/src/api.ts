@@ -1,5 +1,6 @@
 import type {
   DashboardSummary,
+  DatasetInfo,
   ForecastResponse,
   InventoryProduct,
   ScenarioRequest,
@@ -9,18 +10,34 @@ import type {
 const API_URL = import.meta.env.VITE_API_URL ?? "/api/v1";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const isFormData = options?.body instanceof FormData;
   const response = await fetch(`${API_URL}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: isFormData ? undefined : { "Content-Type": "application/json" },
     ...options,
   });
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `Request failed with status ${response.status}`);
+    const payload = await response.json().catch(() => null);
+    const message =
+      payload && typeof payload.detail === "string"
+        ? payload.detail
+        : `Request failed with status ${response.status}`;
+    throw new Error(message);
   }
   return response.json() as Promise<T>;
 }
 
 export const api = {
+  activeDataset: () => request<DatasetInfo>("/datasets/active"),
+  importDataset: (file: File) => {
+    const data = new FormData();
+    data.append("file", file);
+    return request<DatasetInfo>("/datasets/import", {
+      method: "POST",
+      body: data,
+    });
+  },
+  resetDataset: () =>
+    request<DatasetInfo>("/datasets/reset", { method: "POST" }),
   summary: () => request<DashboardSummary>("/dashboard/summary"),
   products: () => request<InventoryProduct[]>("/products"),
   forecast: (productId: string, horizon: number) =>

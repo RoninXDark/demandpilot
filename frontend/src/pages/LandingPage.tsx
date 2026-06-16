@@ -230,7 +230,7 @@ export function LandingPage({ onOpenDemo }: LandingPageProps) {
           <span>DemandPilot</span>
         </a>
         <p>Decision intelligence for modern inventory teams.</p>
-        <span>Portfolio product · 2026</span>
+        <span>Portfolio product - 2026</span>
       </footer>
     </div>
   );

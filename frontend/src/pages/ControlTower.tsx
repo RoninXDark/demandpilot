@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  Archive,
   ArrowDownToLine,
   ArrowLeft,
   BarChart3,
@@ -11,7 +12,9 @@ import {
   ChevronRight,
   CircleGauge,
   ClipboardCheck,
+  ClipboardList,
   Database,
+  Eye,
   FileDown,
   Gauge,
   Headphones,
@@ -64,6 +67,9 @@ type ControlTowerProps = {
   onExitDemo: () => void;
 };
 
+type ActionFilter = "all" | "critical" | "reorder" | "excess";
+type ActionLifecycleStatus = "Open" | "Draft created" | "Reviewed" | "Dismissed";
+
 const horizons = [7, 30, 90];
 
 const navigation: { label: string; icon: LucideIcon; active?: boolean }[] = [
@@ -84,6 +90,34 @@ const productIcons: Record<string, LucideIcon> = {
   webcam: Video,
   headset: Headphones,
 };
+
+const actionFilters: { id: ActionFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "critical", label: "Critical" },
+  { id: "reorder", label: "Reorders" },
+  { id: "excess", label: "Excess" },
+];
+
+function readStoredRecord<T>(key: string, fallback: T): T {
+  try {
+    const value = window.localStorage.getItem(key);
+    return value ? (JSON.parse(value) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveStoredRecord<T>(key: string, value: T) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Local storage is a convenience for the demo workflow.
+  }
+}
+
+function toStatusClass(value: string) {
+  return value.toLowerCase().replaceAll(" ", "-");
+}
 
 function formatMetric(metric: DashboardMetric) {
   if (metric.format === "currency") {
@@ -129,6 +163,37 @@ function downloadDraft(draft: PurchaseOrderDraft) {
   URL.revokeObjectURL(url);
 }
 
+function downloadDraftRegister(drafts: PurchaseOrderDraft[]) {
+  const headers = [
+    "purchase_order",
+    "status",
+    "product_id",
+    "product_name",
+    "quantity",
+    "required_by",
+    "created_at",
+  ];
+  const rows = drafts.map((draft) =>
+    [
+      draft.draft_id,
+      draft.status,
+      draft.product_id,
+      JSON.stringify(draft.product_name),
+      draft.quantity,
+      draft.due_date,
+      draft.created_at,
+    ].join(","),
+  );
+  const url = URL.createObjectURL(
+    new Blob([[headers.join(","), ...rows].join("\n")], { type: "text/csv" }),
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "demandpilot-draft-po-register.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 function MetricTile({ metric, index }: { metric: DashboardMetric; index: number }) {
   const icons = [Store, PackageCheck, BarChart3, AlertTriangle, CircleGauge];
   const Icon = icons[index] ?? CircleGauge;
@@ -149,19 +214,36 @@ function MetricTile({ metric, index }: { metric: DashboardMetric; index: number 
 }
 
 export function ControlTower({ onExitDemo }: ControlTowerProps) {
+  const initialParams = new URLSearchParams(window.location.search);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [products, setProducts] = useState<InventoryProduct[]>([]);
   const [actions, setActions] = useState<ActionRecommendation[]>([]);
   const [dataset, setDataset] = useState<DatasetInfo | null>(null);
   const [forecast, setForecast] = useState<ForecastResponse | null>(null);
   const [scenario, setScenario] = useState<ScenarioResponse | null>(null);
-  const [selectedProduct, setSelectedProduct] = useState("laptop");
+  const [selectedProduct, setSelectedProduct] = useState(
+    initialParams.get("sku") ?? "laptop",
+  );
   const [horizon, setHorizon] = useState(30);
   const [priceChange, setPriceChange] = useState(0);
   const [promotionLift, setPromotionLift] = useState(15);
   const [leadTime, setLeadTime] = useState(7);
-  const [drafts, setDrafts] = useState<Record<string, PurchaseOrderDraft>>({});
-  const [reviewed, setReviewed] = useState<Set<string>>(new Set());
+  const [drafts, setDrafts] = useState<Record<string, PurchaseOrderDraft>>(() =>
+    readStoredRecord<Record<string, PurchaseOrderDraft>>(
+      "demandpilot-draft-pos",
+      {},
+    ),
+  );
+  const [actionStates, setActionStates] = useState<
+    Record<string, ActionLifecycleStatus>
+  >(() =>
+    readStoredRecord<Record<string, ActionLifecycleStatus>>(
+      "demandpilot-action-states",
+      {},
+    ),
+  );
+  const [actionFilter, setActionFilter] = useState<ActionFilter>("all");
+  const [drawerOpen, setDrawerOpen] = useState(initialParams.has("sku"));
   const [collapsed, setCollapsed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [scenarioLoading, setScenarioLoading] = useState(false);
@@ -201,6 +283,14 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
   useEffect(() => {
     void loadDashboard();
   }, [loadDashboard]);
+
+  useEffect(() => {
+    saveStoredRecord("demandpilot-draft-pos", drafts);
+  }, [drafts]);
+
+  useEffect(() => {
+    saveStoredRecord("demandpilot-action-states", actionStates);
+  }, [actionStates]);
 
   useEffect(() => {
     if (!selectedProduct) return;
@@ -279,10 +369,68 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
     (product) => product.product_id === selectedProduct,
   );
 
+  function getActionStatus(action: ActionRecommendation): ActionLifecycleStatus {
+    return actionStates[action.action_id] ?? "Open";
+  }
+
+  const visibleActions = useMemo(() => {
+    return actions.filter((action) => {
+      if (actionFilter === "critical") return action.priority === "Critical";
+      if (actionFilter === "reorder") return action.action_type === "reorder";
+      if (actionFilter === "excess") return action.action_type === "markdown";
+      return true;
+    });
+  }, [actions, actionFilter]);
+
+  const filterCounts = useMemo(
+    () => ({
+      all: actions.length,
+      critical: actions.filter((action) => action.priority === "Critical").length,
+      reorder: actions.filter((action) => action.action_type === "reorder").length,
+      excess: actions.filter((action) => action.action_type === "markdown").length,
+    }),
+    [actions],
+  );
+
+  const draftList = useMemo(
+    () =>
+      Object.values(drafts).sort((left, right) =>
+        left.due_date.localeCompare(right.due_date),
+      ),
+    [drafts],
+  );
+
+  const selectedAction =
+    actions.find(
+      (action) =>
+        action.product_id === selectedProduct &&
+        getActionStatus(action) !== "Dismissed",
+    ) ?? actions.find((action) => action.product_id === selectedProduct);
+
+  const selectedActionStatus = selectedAction
+    ? getActionStatus(selectedAction)
+    : "Open";
+
+  const selectedDraft = selectedAction
+    ? drafts[selectedAction.action_id]
+    : undefined;
+
+  const selectedForecastAccuracy = forecast
+    ? Math.max(0, 100 - forecast.validation_wape * 100).toFixed(1)
+    : null;
+
+  function updateActionStatus(
+    actionId: string,
+    status: ActionLifecycleStatus,
+  ) {
+    setActionStates((current) => ({ ...current, [actionId]: status }));
+  }
+
   async function createDraft(action: ActionRecommendation) {
     try {
       const draft = await api.createDraft(action.action_id);
       setDrafts((current) => ({ ...current, [action.action_id]: draft }));
+      updateActionStatus(action.action_id, "Draft created");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to create draft");
     }
@@ -290,10 +438,7 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
 
   function focusAction(action: ActionRecommendation) {
     setSelectedProduct(action.product_id);
-    document.getElementById("forecast-workspace")?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
+    setDrawerOpen(true);
   }
 
   async function importDataset() {
@@ -385,7 +530,7 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
             <label className="command-search">
               <Search size={16} />
               <input aria-label="Search" placeholder="Search products or actions" />
-              <kbd>⌘ K</kbd>
+              <kbd>Ctrl K</kbd>
             </label>
             <button className="icon-command" title="Notifications">
               <Bell size={18} />
@@ -403,11 +548,11 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
           <strong>{dataset?.source === "upload" ? dataset.name : "Portfolio demo dataset"}</strong>
           <span>
             {dataset
-              ? `${dataset.quality.unique_products} SKUs · ${dataset.quality.unique_stores} locations · ${dataset.quality.accepted_rows.toLocaleString()} rows`
+              ? `${dataset.quality.unique_products} SKUs - ${dataset.quality.unique_stores} locations - ${dataset.quality.accepted_rows.toLocaleString()} rows`
               : "Loading dataset"}
           </span>
           <span className="dataset-date">
-            As of {summary ? formatDate(summary.as_of) : "—"}
+            As of {summary ? formatDate(summary.as_of) : "--"}
           </span>
           <button onClick={() => void loadDashboard()} title="Refresh data">
             <RefreshCw size={15} />
@@ -431,23 +576,32 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
                 <span className="eyebrow">Prioritized by operational risk</span>
                 <h2>Action Queue</h2>
               </div>
-              <span className="count-badge">{actions.length}</span>
+              <span className="count-badge">{visibleActions.length}</span>
             </div>
             <div className="queue-filters">
-              <button className="active">All</button>
-              <button>Critical</button>
-              <button>Reorders</button>
-              <button>Excess</button>
+              {actionFilters.map((filter) => (
+                <button
+                  className={actionFilter === filter.id ? "active" : ""}
+                  key={filter.id}
+                  onClick={() => setActionFilter(filter.id)}
+                >
+                  {filter.label}
+                  <span>{filterCounts[filter.id]}</span>
+                </button>
+              ))}
             </div>
             <div className="action-list">
-              {loading && <div className="panel-loading">Ranking decisions…</div>}
-              {actions.map((action) => {
+              {loading && <div className="panel-loading">Ranking decisions...</div>}
+              {!loading && visibleActions.length === 0 && (
+                <div className="panel-loading">No actions match this filter.</div>
+              )}
+              {visibleActions.map((action) => {
                 const Icon = productIcons[action.product_id] ?? Box;
                 const draft = drafts[action.action_id];
-                const isReviewed = reviewed.has(action.action_id);
+                const status = getActionStatus(action);
                 return (
                   <article
-                    className={`action-card ${action.priority.toLowerCase()}`}
+                    className={`action-card ${action.priority.toLowerCase()} status-${toStatusClass(status)}`}
                     key={action.action_id}
                   >
                     <button className="action-main" onClick={() => focusAction(action)}>
@@ -457,7 +611,10 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
                       <span className="action-copy">
                         <span className="action-meta">
                           <b>{action.priority}</b>
-                          <i>AI optimized · {action.confidence_pct}%</i>
+                          <i>AI optimized - {action.confidence_pct}%</i>
+                          <em className={`workflow-status ${toStatusClass(status)}`}>
+                            {status}
+                          </em>
                         </span>
                         <strong>{action.product_name}</strong>
                         <span>{action.title}</span>
@@ -477,26 +634,33 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
                     </div>
                     <div className="action-footer">
                       <small>{action.estimated_impact}</small>
-                      {draft ? (
-                        <button className="draft-button" onClick={() => downloadDraft(draft)}>
-                          <FileDown size={15} />
-                          {draft.draft_id}
-                        </button>
-                      ) : action.action_type === "reorder" ? (
-                        <button className="queue-action" onClick={() => void createDraft(action)}>
-                          Create Draft PO
-                        </button>
-                      ) : (
-                        <button
-                          className={isReviewed ? "draft-button" : "queue-action"}
-                          onClick={() =>
-                            setReviewed((current) => new Set(current).add(action.action_id))
-                          }
-                        >
-                          {isReviewed ? <Check size={15} /> : null}
-                          {isReviewed ? "Reviewed" : "Review action"}
-                        </button>
-                      )}
+                      <div className="action-buttons">
+                        {draft ? (
+                          <button className="draft-button" onClick={() => downloadDraft(draft)}>
+                            <FileDown size={15} />
+                            {draft.draft_id}
+                          </button>
+                        ) : action.action_type === "reorder" ? (
+                          <button className="queue-action" onClick={() => void createDraft(action)}>
+                            Create Draft PO
+                          </button>
+                        ) : (
+                          <button
+                            className="queue-action"
+                            onClick={() => updateActionStatus(action.action_id, "Reviewed")}
+                          >
+                            Review action
+                          </button>
+                        )}
+                        {status !== "Dismissed" && (
+                          <button
+                            className="ghost-action"
+                            onClick={() => updateActionStatus(action.action_id, "Dismissed")}
+                          >
+                            Dismiss
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </article>
                 );
@@ -511,7 +675,7 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
                 <h2>Demand Forecast</h2>
                 <p>
                   {forecast
-                    ? `${forecast.product_name} · ${forecast.model_name} · ${(100 - forecast.validation_wape * 100).toFixed(1)}% validation accuracy`
+                    ? `${forecast.product_name} - ${forecast.model_name} - ${(100 - forecast.validation_wape * 100).toFixed(1)}% validation accuracy`
                     : "Preparing forecast model"}
                 </p>
               </div>
@@ -573,7 +737,7 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
                 <div className="ai-insight">
                   <span className="insight-icon"><Sparkles size={15} /></span>
                   <div>
-                    <strong>{scenarioLoading ? "Recalculating scenario…" : "AI scenario insight"}</strong>
+                    <strong>{scenarioLoading ? "Recalculating scenario..." : "AI scenario insight"}</strong>
                     <p>{scenario?.insight ?? "Adjust the controls to model an operating decision."}</p>
                   </div>
                   {scenario && (
@@ -616,7 +780,7 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
                 </label>
                 <div className="scenario-output">
                   <span>Recommended order</span>
-                  <strong>{scenario?.recommended_order.toLocaleString() ?? "—"}</strong>
+                  <strong>{scenario?.recommended_order.toLocaleString() ?? "--"}</strong>
                   <small>units for this scenario</small>
                 </div>
                 <div className="scenario-output secondary">
@@ -629,7 +793,7 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
                           notation: "compact",
                           maximumFractionDigits: 1,
                         }).format(scenario.projected_revenue)
-                      : "—"}
+                      : "--"}
                   </strong>
                   <small>{scenario?.risk ?? "Planning window"}</small>
                 </div>
@@ -692,14 +856,251 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
               </div>
             </div>
             <div className="impact-grid">
-              <div><span>On hand</span><strong>{selectedInventory?.current_stock.toLocaleString() ?? "—"}</strong><small>units</small></div>
-              <div><span>Days of cover</span><strong>{selectedInventory?.days_of_cover ?? "—"}</strong><small>days</small></div>
-              <div><span>Reorder point</span><strong>{selectedInventory?.reorder_point.toLocaleString() ?? "—"}</strong><small>units</small></div>
-              <div><span>Avg. demand</span><strong>{selectedInventory?.avg_daily_demand ?? "—"}</strong><small>units / day</small></div>
+              <div><span>On hand</span><strong>{selectedInventory?.current_stock.toLocaleString() ?? "--"}</strong><small>units</small></div>
+              <div><span>Days of cover</span><strong>{selectedInventory?.days_of_cover ?? "--"}</strong><small>days</small></div>
+              <div><span>Reorder point</span><strong>{selectedInventory?.reorder_point.toLocaleString() ?? "--"}</strong><small>units</small></div>
+              <div><span>Avg. demand</span><strong>{selectedInventory?.avg_daily_demand ?? "--"}</strong><small>units / day</small></div>
             </div>
+          </div>
+
+          <div className="operations-panel draft-center">
+            <div className="panel-heading">
+              <div>
+                <span className="eyebrow">Decision workflow</span>
+                <h2>Draft PO Center</h2>
+              </div>
+              <span className="count-badge">{draftList.length}</span>
+            </div>
+            {draftList.length === 0 ? (
+              <div className="draft-empty">
+                <ClipboardList size={28} />
+                <strong>No Draft POs yet</strong>
+                <span>Create one from a reorder action to stage an export.</span>
+              </div>
+            ) : (
+              <>
+                <div className="draft-list">
+                  {draftList.map((draft) => {
+                    const sourceAction = actions.find(
+                      (action) => action.action_id === draft.action_id,
+                    );
+                    const status = sourceAction
+                      ? getActionStatus(sourceAction)
+                      : "Draft created";
+                    return (
+                      <article className="draft-row" key={draft.draft_id}>
+                        <div>
+                          <strong>{draft.draft_id}</strong>
+                          <span>{draft.product_name}</span>
+                        </div>
+                        <dl>
+                          <div>
+                            <dt>Qty</dt>
+                            <dd>{draft.quantity.toLocaleString()}</dd>
+                          </div>
+                          <div>
+                            <dt>Due</dt>
+                            <dd>{formatDate(draft.due_date)}</dd>
+                          </div>
+                        </dl>
+                        <span className={`workflow-status ${toStatusClass(status)}`}>
+                          {status}
+                        </span>
+                        <div className="draft-actions">
+                          <button
+                            className="icon-command"
+                            onClick={() => downloadDraft(draft)}
+                            title="Download PO CSV"
+                          >
+                            <FileDown size={16} />
+                          </button>
+                          {sourceAction && status !== "Reviewed" && (
+                            <button
+                              className="draft-button"
+                              onClick={() =>
+                                updateActionStatus(sourceAction.action_id, "Reviewed")
+                              }
+                            >
+                              <Check size={14} />
+                              Review
+                            </button>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+                <div className="draft-center-footer">
+                  <button
+                    className="button-outline dark-outline"
+                    onClick={() => downloadDraftRegister(draftList)}
+                  >
+                    <FileDown size={16} />
+                    Export register
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </section>
       </main>
+
+      {drawerOpen && selectedInventory && (
+        <div className="drawer-backdrop" onMouseDown={() => setDrawerOpen(false)}>
+          <aside
+            className="sku-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label="SKU decision context"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <span className="eyebrow">SKU decision context</span>
+                <h2>{selectedInventory.product_name}</h2>
+              </div>
+              <button
+                className="icon-command"
+                onClick={() => setDrawerOpen(false)}
+                title="Close"
+              >
+                <X size={18} />
+              </button>
+            </header>
+
+            <div className="drawer-product">
+              <span className="product-icon large">
+                {(() => {
+                  const Icon = productIcons[selectedInventory.product_id] ?? Box;
+                  return <Icon size={30} />;
+                })()}
+              </span>
+              <div>
+                <strong>{selectedInventory.category}</strong>
+                <span className={`risk-pill ${toStatusClass(selectedInventory.risk)}`}>
+                  {selectedInventory.risk}
+                </span>
+              </div>
+            </div>
+
+            <div className="drawer-metrics">
+              <div>
+                <span>Stock on hand</span>
+                <strong>{selectedInventory.current_stock.toLocaleString()}</strong>
+                <small>units</small>
+              </div>
+              <div>
+                <span>Days of cover</span>
+                <strong>{selectedInventory.days_of_cover}</strong>
+                <small>days</small>
+              </div>
+              <div>
+                <span>Reorder point</span>
+                <strong>{selectedInventory.reorder_point.toLocaleString()}</strong>
+                <small>units</small>
+              </div>
+              <div>
+                <span>Forecast accuracy</span>
+                <strong>
+                  {selectedForecastAccuracy ? `${selectedForecastAccuracy}%` : "--"}
+                </strong>
+                <small>validation</small>
+              </div>
+            </div>
+
+            <section className="drawer-section">
+              <div className="drawer-section-heading">
+                <span><Sparkles size={15} /> Recommended action</span>
+                {selectedAction && (
+                  <em className={`workflow-status ${toStatusClass(selectedActionStatus)}`}>
+                    {selectedActionStatus}
+                  </em>
+                )}
+              </div>
+              {selectedAction ? (
+                <article className="drawer-action-card">
+                  <strong>{selectedAction.title}</strong>
+                  <p>{selectedAction.rationale}</p>
+                  <dl>
+                    <div>
+                      <dt>Due date</dt>
+                      <dd>{formatDate(selectedAction.due_date)}</dd>
+                    </div>
+                    <div>
+                      <dt>Quantity</dt>
+                      <dd>
+                        {selectedAction.recommended_quantity?.toLocaleString() ?? "N/A"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Confidence</dt>
+                      <dd>{selectedAction.confidence_pct}%</dd>
+                    </div>
+                  </dl>
+                </article>
+              ) : (
+                <div className="draft-empty compact">
+                  <Eye size={22} />
+                  <span>No active recommendation for this SKU.</span>
+                </div>
+              )}
+            </section>
+
+            <section className="drawer-section">
+              <div className="drawer-section-heading">
+                <span><SlidersHorizontal size={15} /> Scenario note</span>
+              </div>
+              <p className="drawer-note">
+                {scenario?.insight ??
+                  "Use Scenario Lab to test price, promotion, and supplier lead-time changes before creating an order."}
+              </p>
+            </section>
+
+            <footer>
+              {selectedAction?.action_type === "reorder" && !selectedDraft && (
+                <button
+                  className="button-solid"
+                  onClick={() => void createDraft(selectedAction)}
+                >
+                  <ClipboardCheck size={17} />
+                  Create Draft PO
+                </button>
+              )}
+              {selectedDraft && (
+                <button
+                  className="button-solid"
+                  onClick={() => downloadDraft(selectedDraft)}
+                >
+                  <FileDown size={17} />
+                  Download {selectedDraft.draft_id}
+                </button>
+              )}
+              {selectedAction && selectedActionStatus !== "Reviewed" && (
+                <button
+                  className="button-outline dark-outline"
+                  onClick={() =>
+                    updateActionStatus(selectedAction.action_id, "Reviewed")
+                  }
+                >
+                  <Check size={17} />
+                  Mark reviewed
+                </button>
+              )}
+              {selectedAction && selectedActionStatus !== "Dismissed" && (
+                <button
+                  className="button-quiet danger"
+                  onClick={() =>
+                    updateActionStatus(selectedAction.action_id, "Dismissed")
+                  }
+                >
+                  <Archive size={17} />
+                  Dismiss
+                </button>
+              )}
+            </footer>
+          </aside>
+        </div>
+      )}
 
       {importOpen && (
         <div className="modal-backdrop" onMouseDown={() => setImportOpen(false)}>
@@ -730,7 +1131,7 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
                 <div>
                   <strong>{importResult.name} is active</strong>
                   <p>
-                    {importResult.quality.accepted_rows.toLocaleString()} rows accepted · {importResult.quality.duplicate_rows} duplicates removed · {importResult.quality.missing_values} missing values
+                    {importResult.quality.accepted_rows.toLocaleString()} rows accepted - {importResult.quality.duplicate_rows} duplicates removed - {importResult.quality.missing_values} missing values
                   </p>
                 </div>
               </div>
@@ -742,7 +1143,7 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
               <div>
                 <button className="button-outline dark-outline" onClick={() => setImportOpen(false)}>Cancel</button>
                 <button className="button-solid compact" disabled={!selectedFile || uploading} onClick={() => void importDataset()}>
-                  {uploading ? "Validating…" : "Import & activate"}
+                  {uploading ? "Validating..." : "Import & activate"}
                 </button>
               </div>
             </footer>

@@ -28,7 +28,19 @@
 - [x] Draft Purchase Order generation and CSV export
 - [x] Collapsible desktop and compact mobile navigation
 
-## Sprint 4 - Forecasting Lab
+## Sprint 4 - Decision Workflow
+
+- [x] Working Action Queue filters
+- [x] Action lifecycle states
+- [x] Locally persisted demo workflow state
+- [x] SKU Detail Drawer
+- [x] SKU deep links with `?sku=`
+- [x] Draft PO Center
+- [x] Draft PO register export
+- [ ] Persistent action audit trail
+- [ ] Approval and dispatch states
+
+## Sprint 5 - Forecasting Lab
 
 - [ ] Organization, location, and product management
 - [ ] Background import and forecast jobs with Redis
@@ -39,7 +51,7 @@
 - [ ] Holidays, promotions, prices, and external regressors
 - [ ] MLflow experiment tracking and model registry
 
-## Sprint 5 - Inventory Optimization
+## Sprint 6 - Inventory Optimization
 
 - [ ] Service-level policies
 - [ ] Supplier calendars and minimum order quantities
@@ -47,7 +59,7 @@
 - [ ] Multi-location stock transfers
 - [ ] Purchase-order approvals, supplier dispatch, and in-transit tracking
 
-## Sprint 6 - SaaS and Intelligence
+## Sprint 7 - SaaS and Intelligence
 
 - [ ] Authentication, teams, and role-based access
 - [ ] Scheduled reports and email/Telegram alerts

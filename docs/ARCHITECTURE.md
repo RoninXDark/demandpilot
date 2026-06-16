@@ -17,7 +17,9 @@ The analytics layer is deliberately independent from HTTP. Forecasting, inventor
 
 The Action Queue translates inventory calculations into operational recommendations. Each action includes a priority, rationale, timing, confidence, quantity when relevant, and expected impact. Reorder recommendations can create a typed Draft Purchase Order response; the frontend exports that response as a portable CSV for an ERP or accounting workflow.
 
-The Phase 1 draft flow is intentionally lightweight. Approval states, supplier dispatch, receiving, and audit persistence remain future integration boundaries rather than simulated capabilities.
+The v0.4 decision workflow adds local UI lifecycle states for recommendations: Open, Draft created, Reviewed, and Dismissed. This keeps the portfolio demo interactive without pretending to be a full ERP. Approval states, supplier dispatch, receiving, and durable action audit persistence remain future integration boundaries.
+
+SKU detail drawers are frontend composition over existing API contracts: product inventory, active recommendation, forecast validation, and scenario insight. The drawer can be deep-linked with `?sku=<product_id>` for portfolio walkthroughs.
 
 ## Forecasting Baseline
 

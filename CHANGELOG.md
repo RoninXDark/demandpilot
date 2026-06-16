@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 - Decision Workflow
+
+- Added working Action Queue filters for all, critical, reorder, and excess-stock recommendations
+- Added action lifecycle states: Open, Draft created, Reviewed, and Dismissed
+- Persisted the demo workflow state locally between browser sessions
+- Added SKU Detail Drawer with stock, days of cover, reorder point, forecast accuracy, rationale, and scenario insight
+- Added SKU deep links using the `?sku=` query parameter
+- Added Draft PO Center for generated purchase-order drafts
+- Added individual Draft PO CSV export and Draft PO register export
+- Refreshed portfolio screenshots and product documentation
+- Kept the current workflow scoped to decision staging, not ERP replacement
+
 ## 0.3.0 - Inventory Control Tower
 
 - Added a product landing page with a generated visual system

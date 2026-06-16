@@ -17,6 +17,8 @@ Retail teams often plan inventory in spreadsheets after stockouts or excess inve
 - Calculate safety stock, reorder points, and suggested order quantities
 - Simulate price, promotion, and supplier lead-time changes directly on the forecast
 - Convert replenishment recommendations into downloadable Draft PO files
+- Review, dismiss, and track recommendation status through a lightweight workflow
+- Open SKU-level decision context with inventory, forecast, and AI rationale
 - Expose every calculation through a documented REST API
 
 ## Current Product
@@ -30,7 +32,9 @@ The repository currently contains:
 - A product landing page and returning-user Control Tower route
 - A prioritized recommendation engine for critical reorders, planned replenishment, and excess-stock actions
 - Action rationale, confidence, due date, quantity, and expected business impact
-- A simplified Draft Purchase Order workflow with CSV export
+- Action lifecycle states: Open, Draft created, Reviewed, and Dismissed
+- A SKU detail drawer with stock, cover, reorder point, forecast accuracy, and action rationale
+- A simplified Draft Purchase Order Center with CSV export
 - A deterministic retail dataset generator
 - Daily sales aggregation and KPI calculations
 - Seasonal-naive and trend/weekday forecasting candidates
@@ -43,6 +47,19 @@ The repository currently contains:
 - Persistent active-dataset selection with one-click demo reset
 - Responsive React dashboard backed by live API data
 - Backend tests, frontend production build, Docker, and CI
+
+## Decision Workflow
+
+![DemandPilot SKU decision drawer](docs/assets/sku-drawer-preview.png)
+
+The v0.4 workflow is built around a planner's daily loop:
+
+1. Filter the Action Queue by all actions, critical risks, reorders, or excess stock.
+2. Open a SKU decision drawer to inspect the business rationale behind the recommendation.
+3. Create a Draft PO for reorder actions or mark non-order actions as reviewed.
+4. Track generated Draft POs in the Draft PO Center and export individual CSV files or the full register.
+
+This keeps the current release honest: DemandPilot recommends and stages decisions, while full ERP approval, supplier dispatch, receiving, and audit persistence remain future integration steps.
 
 ## Architecture
 
@@ -128,4 +145,4 @@ Release history is documented in [CHANGELOG.md](CHANGELOG.md).
 ## Repository Name and Description
 
 **Name:** `demandpilot`
-**GitHub description:** `AI-powered inventory decision platform with demand forecasting, scenario planning, prioritized actions, and Draft PO exports.`
+**GitHub description:** `AI-powered inventory decision platform with demand forecasting, SKU context, action workflow, and Draft PO exports.`

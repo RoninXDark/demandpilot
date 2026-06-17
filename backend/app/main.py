@@ -10,6 +10,7 @@ from app.schemas import (
     ActionRecommendation,
     DashboardSummary,
     DatasetInfo,
+    DatasetPreview,
     ForecastResponse,
     InventoryProduct,
     PurchaseOrderDraft,
@@ -45,7 +46,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.4.0",
+    version="0.5.0",
     description="Demand forecasting and inventory decision API.",
     lifespan=lifespan,
 )
@@ -66,6 +67,16 @@ def health() -> dict[str, str]:
 @app.get(f"{settings.api_prefix}/datasets/active", response_model=DatasetInfo)
 def get_active_dataset() -> DatasetInfo:
     return dataset_registry.active_info()
+
+
+@app.get(
+    f"{settings.api_prefix}/datasets/active/preview",
+    response_model=DatasetPreview,
+)
+def get_active_dataset_preview(
+    limit: int = Query(default=8, ge=1, le=25),
+) -> DatasetPreview:
+    return dataset_registry.active_preview(limit)
 
 
 @app.post(f"{settings.api_prefix}/datasets/import", response_model=DatasetInfo)

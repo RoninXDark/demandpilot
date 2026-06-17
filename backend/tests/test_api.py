@@ -61,3 +61,13 @@ def test_dataset_import_endpoint(tmp_path: Path, monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["quality"]["accepted_rows"] == 20
+
+
+def test_dataset_preview_endpoint():
+    with TestClient(app) as client:
+        response = client.get("/api/v1/datasets/active/preview?limit=3")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "date" in payload["columns"]
+    assert len(payload["rows"]) == 3

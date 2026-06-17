@@ -16,6 +16,9 @@
 - [x] Data-quality reports and canonical normalization
 - [x] Persistent active dataset and demo reset
 - [x] Dashboard dataset controls and quality summary
+- [x] Data quality score and forecast-readiness status
+- [x] Normalized active dataset preview
+- [x] CSV template download
 - [ ] PostgreSQL schema and Alembic migrations
 
 ## Sprint 3 - Inventory Control Tower
@@ -40,7 +43,17 @@
 - [ ] Persistent action audit trail
 - [ ] Approval and dispatch states
 
-## Sprint 5 - Forecasting Lab
+## Sprint 5 - Data Control and Forecast Readiness
+
+- [x] Data Readiness Center in the dashboard
+- [x] Active dataset sample table
+- [x] Forecast model leaderboard
+- [x] Weighted moving-average candidate
+- [x] Dataset-switch cleanup for local workflow state
+- [ ] Upload preview before activation
+- [ ] Dataset version history
+
+## Sprint 6 - Forecasting Lab
 
 - [ ] Organization, location, and product management
 - [ ] Background import and forecast jobs with Redis
@@ -51,7 +64,7 @@
 - [ ] Holidays, promotions, prices, and external regressors
 - [ ] MLflow experiment tracking and model registry
 
-## Sprint 6 - Inventory Optimization
+## Sprint 7 - Inventory Optimization
 
 - [ ] Service-level policies
 - [ ] Supplier calendars and minimum order quantities
@@ -59,7 +72,7 @@
 - [ ] Multi-location stock transfers
 - [ ] Purchase-order approvals, supplier dispatch, and in-transit tracking
 
-## Sprint 7 - SaaS and Intelligence
+## Sprint 8 - SaaS and Intelligence
 
 - [ ] Authentication, teams, and role-based access
 - [ ] Scheduled reports and email/Telegram alerts

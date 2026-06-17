@@ -28,6 +28,10 @@ export type DataQualityReport = {
   unique_stores: number;
   date_start: string;
   date_end: string;
+  history_days: number;
+  acceptance_rate: number;
+  quality_score: number;
+  readiness: string;
   warnings: string[];
 };
 
@@ -38,6 +42,18 @@ export type DatasetInfo = {
   source: "demo" | "upload";
   activated_at: string;
   quality: DataQualityReport;
+};
+
+export type DatasetPreview = {
+  columns: string[];
+  rows: Record<string, string | number | null>[];
+};
+
+export type ForecastModelCandidate = {
+  rank: number;
+  name: string;
+  validation_mae: number;
+  validation_wape: number;
 };
 
 export type InventoryProduct = {
@@ -59,6 +75,7 @@ export type ForecastResponse = {
   model_name: string;
   validation_mae: number;
   validation_wape: number;
+  model_candidates: ForecastModelCandidate[];
   history: { date: string; value: number }[];
   forecast: {
     date: string;

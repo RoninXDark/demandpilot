@@ -16,11 +16,13 @@ import {
   Database,
   Eye,
   FileDown,
+  FileSpreadsheet,
   Gauge,
   Headphones,
   Keyboard,
   Laptop,
   LayoutDashboard,
+  ListChecks,
   Monitor,
   PackageCheck,
   PanelLeftClose,
@@ -28,6 +30,7 @@ import {
   RefreshCw,
   Search,
   Settings,
+  ShieldCheck,
   SlidersHorizontal,
   Sparkles,
   Store,
@@ -57,6 +60,7 @@ import type {
   DashboardMetric,
   DashboardSummary,
   DatasetInfo,
+  DatasetPreview,
   ForecastResponse,
   InventoryProduct,
   PurchaseOrderDraft,
@@ -97,6 +101,21 @@ const actionFilters: { id: ActionFilter; label: string }[] = [
   { id: "reorder", label: "Reorders" },
   { id: "excess", label: "Excess" },
 ];
+
+const requiredColumns = ["date", "product_id", "units_sold", "unit_price"];
+const optionalColumns = [
+  "store_id",
+  "product_name",
+  "category",
+  "stock_on_hand",
+  "lead_time_days",
+];
+const sampleTemplateRows = [
+  "date,store_id,product_id,product_name,category,units_sold,unit_price,stock_on_hand,lead_time_days",
+  "2026-01-01,warehouse-a,sku-1001,Everyday Laptop,Electronics,18,799,420,9",
+  "2026-01-02,warehouse-a,sku-1001,Everyday Laptop,Electronics,22,799,398,9",
+  "2026-01-01,warehouse-b,sku-2040,USB-C Dock,Accessories,31,119,260,7",
+].join("\n");
 
 function readStoredRecord<T>(key: string, fallback: T): T {
   try {
@@ -140,6 +159,32 @@ function formatDate(value: string) {
     month: "short",
     day: "numeric",
   }).format(new Date(`${value}T12:00:00`));
+}
+
+function formatPreviewValue(value: string | number | null) {
+  if (value == null || value === "") return "--";
+  if (typeof value === "number") {
+    return Number.isInteger(value) ? value.toLocaleString() : value.toFixed(2);
+  }
+  return value;
+}
+
+function scoreClass(score?: number) {
+  if (score == null) return "unknown";
+  if (score >= 88) return "strong";
+  if (score >= 75) return "warning";
+  return "risk";
+}
+
+function downloadCsvTemplate() {
+  const url = URL.createObjectURL(
+    new Blob([sampleTemplateRows], { type: "text/csv" }),
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "demandpilot-sales-template.csv";
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function downloadDraft(draft: PurchaseOrderDraft) {
@@ -219,6 +264,7 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
   const [products, setProducts] = useState<InventoryProduct[]>([]);
   const [actions, setActions] = useState<ActionRecommendation[]>([]);
   const [dataset, setDataset] = useState<DatasetInfo | null>(null);
+  const [datasetPreview, setDatasetPreview] = useState<DatasetPreview | null>(null);
   const [forecast, setForecast] = useState<ForecastResponse | null>(null);
   const [scenario, setScenario] = useState<ScenarioResponse | null>(null);
   const [selectedProduct, setSelectedProduct] = useState(
@@ -248,7 +294,7 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
   const [loading, setLoading] = useState(true);
   const [scenarioLoading, setScenarioLoading] = useState(false);
   const [error, setError] = useState("");
-  const [importOpen, setImportOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(initialParams.has("data-control"));
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [importResult, setImportResult] = useState<DatasetInfo | null>(null);
@@ -257,17 +303,19 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
     setLoading(true);
     setError("");
     try {
-      const [summaryData, productData, actionData, datasetData] =
+      const [summaryData, productData, actionData, datasetData, previewData] =
         await Promise.all([
           api.summary(),
           api.products(),
           api.actions(),
           api.activeDataset(),
+          api.activeDatasetPreview(8),
         ]);
       setSummary(summaryData);
       setProducts(productData);
       setActions(actionData);
       setDataset(datasetData);
+      setDatasetPreview(previewData);
       setSelectedProduct((current) =>
         productData.some((item) => item.product_id === current)
           ? current
@@ -418,6 +466,10 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
   const selectedForecastAccuracy = forecast
     ? Math.max(0, 100 - forecast.validation_wape * 100).toFixed(1)
     : null;
+  const quality = dataset?.quality;
+  const qualityScore = quality?.quality_score ?? 0;
+  const previewColumns = datasetPreview?.columns.slice(0, 6) ?? [];
+  const modelCandidates = forecast?.model_candidates.slice(0, 3) ?? [];
 
   function updateActionStatus(
     actionId: string,
@@ -449,6 +501,8 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
       const result = await api.importDataset(selectedFile);
       setImportResult(result);
       setScenario(null);
+      setDrafts({});
+      setActionStates({});
       await loadDashboard();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Import failed");
@@ -464,6 +518,8 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
       setImportResult(result);
       setSelectedFile(null);
       setScenario(null);
+      setDrafts({});
+      setActionStates({});
       await loadDashboard();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Reset failed");
@@ -490,7 +546,12 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
         </div>
         <nav className="app-navigation" aria-label="Product navigation">
           {navigation.map(({ label, icon: Icon, active }) => (
-            <button className={active ? "active" : ""} key={label} title={label}>
+            <button
+              className={active ? "active" : ""}
+              key={label}
+              onClick={() => label === "Data Control" && setImportOpen(true)}
+              title={label}
+            >
               <Icon size={18} />
               {!collapsed && <span>{label}</span>}
               {!collapsed && label === "Action Center" && (
@@ -548,9 +609,17 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
           <strong>{dataset?.source === "upload" ? dataset.name : "Portfolio demo dataset"}</strong>
           <span>
             {dataset
-              ? `${dataset.quality.unique_products} SKUs - ${dataset.quality.unique_stores} locations - ${dataset.quality.accepted_rows.toLocaleString()} rows`
+              ? `${dataset.quality.unique_products} SKUs - ${dataset.quality.unique_stores} locations - ${dataset.quality.accepted_rows.toLocaleString()} rows - ${dataset.quality.history_days} days`
               : "Loading dataset"}
           </span>
+          <button
+            className={`quality-badge ${scoreClass(dataset?.quality.quality_score)}`}
+            onClick={() => setImportOpen(true)}
+            title="Open Data Control"
+          >
+            <ShieldCheck size={13} />
+            {dataset?.quality.quality_score ?? "--"} data score
+          </button>
           <span className="dataset-date">
             As of {summary ? formatDate(summary.as_of) : "--"}
           </span>
@@ -747,6 +816,23 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
                     </span>
                   )}
                 </div>
+                {modelCandidates.length > 0 && (
+                  <div className="model-board">
+                    <span><ListChecks size={14} /> Forecast model test</span>
+                    {modelCandidates.map((candidate) => (
+                      <div
+                        className={candidate.rank === 1 ? "winner" : ""}
+                        key={candidate.name}
+                      >
+                        <strong>{candidate.rank}. {candidate.name}</strong>
+                        <small>
+                          MAE {candidate.validation_mae} - WAPE{" "}
+                          {(candidate.validation_wape * 100).toFixed(1)}%
+                        </small>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <aside className="scenario-controls">
@@ -942,6 +1028,75 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
               </>
             )}
           </div>
+
+          <div className="operations-panel data-control-card">
+            <div className="panel-heading">
+              <div>
+                <span className="eyebrow">Data Control</span>
+                <h2>Forecast readiness</h2>
+              </div>
+              <span className={`data-score ${scoreClass(qualityScore)}`}>
+                {qualityScore}
+              </span>
+            </div>
+            <div className="data-control-body">
+              <div className="data-readiness">
+                <ShieldCheck size={21} />
+                <div>
+                  <strong>{quality?.readiness ?? "Checking dataset"}</strong>
+                  <span>
+                    {quality
+                      ? `${quality.acceptance_rate}% accepted - ${quality.history_days} days of history`
+                      : "Waiting for dataset profile"}
+                  </span>
+                </div>
+              </div>
+              <div className="quality-grid">
+                <div><span>Rows</span><strong>{quality?.accepted_rows.toLocaleString() ?? "--"}</strong></div>
+                <div><span>Rejected</span><strong>{quality?.rejected_rows ?? "--"}</strong></div>
+                <div><span>Duplicates</span><strong>{quality?.duplicate_rows ?? "--"}</strong></div>
+                <div><span>Missing</span><strong>{quality?.missing_values ?? "--"}</strong></div>
+              </div>
+              <div className="mini-preview">
+                <div className="mini-preview-head">
+                  <span><FileSpreadsheet size={14} /> Active sample</span>
+                  <button onClick={() => setImportOpen(true)}>Open</button>
+                </div>
+                <div className="mini-preview-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        {previewColumns.map((column) => (
+                          <th key={column}>{column}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {datasetPreview?.rows.slice(0, 3).map((row, index) => (
+                        <tr key={`${row.product_id ?? "row"}-${index}`}>
+                          {previewColumns.map((column) => (
+                            <td key={column}>{formatPreviewValue(row[column])}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              {quality?.warnings.length ? (
+                <ul className="data-warnings">
+                  {quality.warnings.slice(0, 2).map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="data-clean">
+                  <Check size={14} />
+                  No blocking data quality issues.
+                </div>
+              )}
+            </div>
+          </div>
         </section>
       </main>
 
@@ -1104,42 +1259,147 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
 
       {importOpen && (
         <div className="modal-backdrop" onMouseDown={() => setImportOpen(false)}>
-          <section className="import-modal" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
+          <section className="import-modal data-control-modal" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
             <header>
               <div>
                 <span className="eyebrow">Data Control</span>
-                <h2>Import sales history</h2>
-                <p>Activate a validated CSV or Excel dataset across the Control Tower.</p>
+                <h2>Dataset readiness center</h2>
+                <p>Validate sales history, inspect active rows, and refresh the forecast engine.</p>
               </div>
               <button className="icon-command" onClick={() => setImportOpen(false)} title="Close">
                 <X size={18} />
               </button>
             </header>
-            <label className="file-drop">
-              <Upload size={24} />
-              <strong>{selectedFile?.name ?? "Choose a CSV or XLSX file"}</strong>
-              <span>Maximum 10 MB. Required: date, product ID, units sold, price.</span>
-              <input
-                type="file"
-                accept=".csv,.xlsx"
-                onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
-              />
-            </label>
-            {importResult && (
-              <div className="quality-result">
-                <span className="quality-check"><Check size={18} /></span>
+            <div className="data-modal-grid">
+              <aside className="data-profile-card">
+                <span className={`data-score-orb ${scoreClass(qualityScore)}`}>
+                  {qualityScore}
+                </span>
                 <div>
-                  <strong>{importResult.name} is active</strong>
+                  <strong>{quality?.readiness ?? "Dataset profile loading"}</strong>
                   <p>
-                    {importResult.quality.accepted_rows.toLocaleString()} rows accepted - {importResult.quality.duplicate_rows} duplicates removed - {importResult.quality.missing_values} missing values
+                    {dataset?.source === "upload" ? dataset.name : "Demo Retail Operations"}
                   </p>
                 </div>
+                <dl>
+                  <div>
+                    <dt>Accepted rows</dt>
+                    <dd>{quality?.accepted_rows.toLocaleString() ?? "--"}</dd>
+                  </div>
+                  <div>
+                    <dt>Acceptance</dt>
+                    <dd>{quality?.acceptance_rate ?? "--"}%</dd>
+                  </div>
+                  <div>
+                    <dt>Products</dt>
+                    <dd>{quality?.unique_products ?? "--"}</dd>
+                  </div>
+                  <div>
+                    <dt>History</dt>
+                    <dd>{quality?.history_days ?? "--"} days</dd>
+                  </div>
+                </dl>
+                <div className="profile-range">
+                  <span>{quality?.date_start ?? "--"}</span>
+                  <i />
+                  <span>{quality?.date_end ?? "--"}</span>
+                </div>
+              </aside>
+
+              <div className="data-import-stack">
+                <label className="file-drop">
+                  <Upload size={24} />
+                  <strong>{selectedFile?.name ?? "Choose a CSV or XLSX file"}</strong>
+                  <span>Maximum 10 MB. Required fields are mapped automatically.</span>
+                  <input
+                    type="file"
+                    accept=".csv,.xlsx"
+                    onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                  />
+                </label>
+                <div className="schema-panel">
+                  <div>
+                    <span><Database size={14} /> Required fields</span>
+                    <div className="schema-chips">
+                      {requiredColumns.map((column) => (
+                        <em key={column}>{column}</em>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <span><ListChecks size={14} /> Optional planning fields</span>
+                    <div className="schema-chips muted">
+                      {optionalColumns.map((column) => (
+                        <em key={column}>{column}</em>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                {importResult && (
+                  <div className="quality-result">
+                    <span className="quality-check"><Check size={18} /></span>
+                    <div>
+                      <strong>{importResult.name} is active</strong>
+                      <p>
+                        {importResult.quality.accepted_rows.toLocaleString()} rows accepted - {importResult.quality.quality_score} quality score - {importResult.quality.readiness}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+
+              <div className="data-preview-card">
+                <div className="data-preview-title">
+                  <span><FileSpreadsheet size={15} /> Active dataset preview</span>
+                  <button onClick={downloadCsvTemplate}>
+                    <FileDown size={14} />
+                    Template
+                  </button>
+                </div>
+                <div className="data-preview-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        {previewColumns.map((column) => (
+                          <th key={column}>{column}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {datasetPreview?.rows.map((row, index) => (
+                        <tr key={`${row.product_id ?? "preview"}-${index}`}>
+                          {previewColumns.map((column) => (
+                            <td key={column}>{formatPreviewValue(row[column])}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {quality?.warnings.length ? (
+                  <ul className="data-warnings modal-warnings">
+                    {quality.warnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="data-clean modal-clean">
+                    <Check size={14} />
+                    Dataset is ready for forecast and replenishment calculations.
+                  </div>
+                )}
+              </div>
+            </div>
             <footer>
-              <button className="button-quiet" onClick={() => void resetDataset()} disabled={uploading}>
-                Reset demo data
-              </button>
+              <div>
+                <button className="button-quiet" onClick={() => void resetDataset()} disabled={uploading}>
+                  Reset demo data
+                </button>
+                <button className="button-outline dark-outline" onClick={downloadCsvTemplate}>
+                  <FileDown size={16} />
+                  Download template
+                </button>
+              </div>
               <div>
                 <button className="button-outline dark-outline" onClick={() => setImportOpen(false)}>Cancel</button>
                 <button className="button-solid compact" disabled={!selectedFile || uploading} onClick={() => void importDataset()}>

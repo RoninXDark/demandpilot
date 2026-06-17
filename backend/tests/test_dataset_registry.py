@@ -1,4 +1,5 @@
 from io import BytesIO
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -82,3 +83,29 @@ def test_reset_returns_to_demo_dataset(tmp_path):
 
     assert info.source == "demo"
     assert service.active_path() == service.demo_path
+
+
+def test_active_info_recovers_old_upload_metadata(tmp_path):
+    service = registry(tmp_path)
+    dates = pd.date_range("2026-01-01", periods=20, freq="D")
+    frame = pd.DataFrame(
+        {
+            "date": dates,
+            "product_id": ["sku-old"] * 20,
+            "units_sold": [3] * 20,
+            "unit_price": [11] * 20,
+        }
+    )
+    info = service.import_file("legacy.csv", frame.to_csv(index=False).encode())
+    metadata = json.loads(service.metadata_path.read_text(encoding="utf-8"))
+    metadata["dataset"]["quality"].pop("quality_score")
+    metadata["dataset"]["quality"].pop("acceptance_rate")
+    metadata["dataset"]["quality"].pop("history_days")
+    metadata["dataset"]["quality"].pop("readiness")
+    service.metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    recovered = service.active_info()
+
+    assert recovered.dataset_id == info.dataset_id
+    assert recovered.quality.quality_score > 0
+    assert recovered.quality.readiness

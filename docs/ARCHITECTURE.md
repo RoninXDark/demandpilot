@@ -23,16 +23,19 @@ SKU detail drawers are frontend composition over existing API contracts: product
 
 ## Forecasting Baseline
 
-The MVP evaluates two transparent candidates:
+The current baseline evaluates three transparent candidates:
 
 1. Seven-day seasonal naive forecast
 2. Linear trend adjusted by weekday factors
+3. Weighted moving average blended with weekly seasonality
 
-The final model is selected using mean absolute error on a held-out tail window. WAPE is reported as a business-readable accuracy measure. This baseline creates a defensible benchmark before advanced models are introduced.
+The final model is selected using mean absolute error on a held-out tail window. WAPE is reported as a business-readable accuracy measure. The API returns the model leaderboard so the frontend can show why a forecast was selected. This baseline creates a defensible benchmark before advanced models are introduced.
 
 ## Data Ingestion Boundary
 
 The dataset registry accepts CSV/XLSX input, maps common column aliases, validates core sales fields, applies documented defaults, and writes a canonical CSV representation. Analytics services always resolve the current dataset through the registry, so switching data sources does not change forecasting code.
+
+The v0.5 Data Control layer adds a normalized active-dataset preview and readiness metadata: quality score, acceptance rate, date coverage, and warnings. This gives planners a clear check before trusting forecast and replenishment output.
 
 Runtime upload files are excluded from Git. Docker uses a dedicated uploads volume to preserve them across container restarts.
 

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from app.schemas import ForecastPoint, ForecastResponse, TimePoint
+from app.schemas import ForecastModelCandidate, ForecastPoint, ForecastResponse, TimePoint
 
 
 @dataclass(frozen=True)
@@ -47,6 +47,16 @@ def _trend_weekday(train: np.ndarray, horizon: int) -> np.ndarray:
     return np.maximum(trend * future_factors, 0)
 
 
+def _weighted_moving_average(train: np.ndarray, horizon: int) -> np.ndarray:
+    if len(train) == 0:
+        return np.zeros(horizon)
+    window = train[-min(21, len(train)) :]
+    weights = np.linspace(1.0, 2.2, len(window))
+    level = float(np.average(window, weights=weights))
+    weekly = _seasonal_naive(train, horizon)
+    return np.maximum((level * 0.55) + (weekly * 0.45), 0)
+
+
 def _metrics(actual: np.ndarray, predicted: np.ndarray) -> tuple[float, float]:
     errors = np.abs(actual - predicted)
     mae = float(np.mean(errors))
@@ -55,19 +65,20 @@ def _metrics(actual: np.ndarray, predicted: np.ndarray) -> tuple[float, float]:
     return mae, wape
 
 
-def _select_model(series: pd.Series) -> CandidateResult:
+def _evaluate_candidates(series: pd.Series) -> list[CandidateResult]:
     values = series.to_numpy(dtype=float)
     holdout = min(28, max(7, len(values) // 5))
     train, actual = values[:-holdout], values[-holdout:]
     candidates = {
         "Seasonal naive (7-day)": _seasonal_naive(train, holdout),
         "Trend + weekday": _trend_weekday(train, holdout),
+        "Weighted moving average": _weighted_moving_average(train, holdout),
     }
     results = []
     for name, prediction in candidates.items():
         mae, wape = _metrics(actual, prediction)
         results.append(CandidateResult(name=name, mae=mae, wape=wape))
-    return min(results, key=lambda result: result.mae)
+    return sorted(results, key=lambda result: result.mae)
 
 
 def forecast_product(
@@ -76,17 +87,23 @@ def forecast_product(
     horizon_days: int,
 ) -> ForecastResponse:
     series = _daily_series(frame, product_id)
-    selected = _select_model(series)
+    candidates = _evaluate_candidates(series)
+    selected = candidates[0]
     values = series.to_numpy(dtype=float)
 
     if selected.name.startswith("Seasonal"):
         predictions = _seasonal_naive(values, horizon_days)
         fitted = _seasonal_naive(values[:-7], 7) if len(values) >= 14 else values[-7:]
         residuals = values[-len(fitted):] - fitted
-    else:
+    elif selected.name.startswith("Trend"):
         predictions = _trend_weekday(values, horizon_days)
         validation_size = min(28, max(7, len(values) // 5))
         fitted = _trend_weekday(values[:-validation_size], validation_size)
+        residuals = values[-validation_size:] - fitted
+    else:
+        predictions = _weighted_moving_average(values, horizon_days)
+        validation_size = min(28, max(7, len(values) // 5))
+        fitted = _weighted_moving_average(values[:-validation_size], validation_size)
         residuals = values[-validation_size:] - fitted
 
     residual_std = float(np.std(residuals)) if len(residuals) else 0.0
@@ -118,6 +135,15 @@ def forecast_product(
         model_name=selected.name,
         validation_mae=round(selected.mae, 2),
         validation_wape=round(selected.wape, 4),
+        model_candidates=[
+            ForecastModelCandidate(
+                rank=index + 1,
+                name=result.name,
+                validation_mae=round(result.mae, 2),
+                validation_wape=round(result.wape, 4),
+            )
+            for index, result in enumerate(candidates)
+        ],
         history=history,
         forecast=future,
     )

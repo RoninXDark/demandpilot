@@ -8,8 +8,9 @@ import re
 from uuid import uuid4
 
 import pandas as pd
+from pydantic import ValidationError
 
-from app.schemas import DataQualityReport, DatasetInfo
+from app.schemas import DataQualityReport, DatasetInfo, DatasetPreview
 
 
 CORE_COLUMNS = {"date", "product_id", "units_sold", "unit_price"}
@@ -78,7 +79,22 @@ class DatasetRegistry:
     def active_info(self) -> DatasetInfo:
         metadata = self._read_metadata()
         if metadata and self.active_path() != self.demo_path:
-            return DatasetInfo.model_validate(metadata["dataset"])
+            try:
+                return DatasetInfo.model_validate(metadata["dataset"])
+            except (KeyError, TypeError, ValidationError):
+                frame = pd.read_csv(self.active_path())
+                _, quality = self._normalize(frame)
+                dataset = metadata.get("dataset", {})
+                if not isinstance(dataset, dict):
+                    dataset = {}
+                return DatasetInfo(
+                    dataset_id=str(dataset.get("dataset_id", "uploaded")),
+                    name=str(dataset.get("name", "Uploaded dataset")),
+                    filename=str(dataset.get("filename", self.active_path().name)),
+                    source="upload",
+                    activated_at=datetime.now(timezone.utc),
+                    quality=quality,
+                )
 
         frame = pd.read_csv(self.demo_path)
         _, quality = self._normalize(frame)
@@ -93,6 +109,16 @@ class DatasetRegistry:
             source="demo",
             activated_at=activated_at,
             quality=quality,
+        )
+
+    def active_preview(self, limit: int = 8) -> DatasetPreview:
+        frame = pd.read_csv(self.active_path())
+        visible = [column for column in STANDARD_COLUMNS if column in frame.columns]
+        preview = frame.loc[:, visible].head(limit)
+        preview = preview.where(pd.notna(preview), None)
+        return DatasetPreview(
+            columns=visible,
+            rows=preview.to_dict(orient="records"),
         )
 
     def import_file(self, filename: str, content: bytes) -> DatasetInfo:
@@ -230,9 +256,38 @@ class DatasetRegistry:
             warnings.append(f"{duplicate_rows} duplicate rows were removed.")
 
         frame = frame[STANDARD_COLUMNS].sort_values("date").reset_index(drop=True)
+        row_count = len(source)
+        accepted_rows = len(frame)
+        history_days = int((frame["date"].max().date() - frame["date"].min().date()).days + 1)
+        acceptance_rate = round(accepted_rows / max(row_count, 1) * 100, 1)
+        rejected_rate = rejected_rows / max(row_count, 1)
+        duplicate_rate = duplicate_rows / max(row_count, 1)
+        missing_rate = missing_values / max(row_count * len(source.columns), 1)
+        quality_score = int(
+            round(
+                max(
+                    0,
+                    min(
+                        100,
+                        100
+                        - rejected_rate * 45
+                        - duplicate_rate * 20
+                        - missing_rate * 30
+                        - len(warnings) * 3,
+                    ),
+                )
+            )
+        )
+        if quality_score >= 88 and unique_dates >= 90:
+            readiness = "Forecast ready"
+        elif quality_score >= 75:
+            readiness = "Usable with warnings"
+        else:
+            readiness = "Needs cleanup"
+
         quality = DataQualityReport(
             row_count=len(source),
-            accepted_rows=len(frame),
+            accepted_rows=accepted_rows,
             rejected_rows=rejected_rows,
             duplicate_rows=duplicate_rows,
             missing_values=missing_values,
@@ -240,6 +295,10 @@ class DatasetRegistry:
             unique_stores=int(frame["store_id"].nunique()),
             date_start=frame["date"].min().date(),
             date_end=frame["date"].max().date(),
+            history_days=history_days,
+            acceptance_rate=acceptance_rate,
+            quality_score=quality_score,
+            readiness=readiness,
             warnings=warnings,
         )
         frame["date"] = frame["date"].dt.date.astype(str)

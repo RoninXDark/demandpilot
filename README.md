@@ -37,16 +37,32 @@ The repository currently contains:
 - A simplified Draft Purchase Order Center with CSV export
 - A deterministic retail dataset generator
 - Daily sales aggregation and KPI calculations
-- Seasonal-naive and trend/weekday forecasting candidates
+- Seasonal-naive, trend/weekday, and weighted moving-average forecasting candidates
 - Automatic model selection using holdout MAE
+- Forecast model leaderboard with MAE and WAPE for planner trust
 - Forecast confidence ranges and WAPE reporting
 - Inventory risk and replenishment recommendations
 - An integrated Scenario Lab with a live alternative forecast curve and AI insight
 - CSV/XLSX import with automatic column alias mapping
-- Data-quality reporting for rejected rows, duplicates, missing values, and defaults
+- Data Readiness Center with quality score, acceptance rate, active sample rows, and schema guidance
+- Data-quality reporting for rejected rows, duplicates, missing values, defaults, and forecast readiness
 - Persistent active-dataset selection with one-click demo reset
 - Responsive React dashboard backed by live API data
 - Backend tests, frontend production build, Docker, and CI
+
+## Data Control
+
+![DemandPilot Data Control](docs/assets/data-control-preview.png)
+
+The v0.5 Data Control layer turns uploads into an auditable planning input:
+
+1. Inspect the active dataset's quality score, accepted rows, history range, and forecast readiness.
+2. Download a CSV template with the canonical planning fields.
+3. Import CSV/XLSX sales history with automatic alias mapping and validation.
+4. Preview normalized active rows before trusting the Action Queue and forecast output.
+5. Compare forecast model candidates through MAE and WAPE before using the selected model.
+
+Runtime uploads stay in the ignored `data/uploads/` directory and are not committed to the portfolio repository.
 
 ## Decision Workflow
 
@@ -128,6 +144,7 @@ Custom datasets can be imported from the dashboard. See [docs/DATA_FORMAT.md](do
 |---|---|---|
 | `GET` | `/api/v1/dashboard/summary` | Portfolio KPIs and product revenue |
 | `GET` | `/api/v1/datasets/active` | Active dataset and quality report |
+| `GET` | `/api/v1/datasets/active/preview` | Normalized active dataset preview rows |
 | `POST` | `/api/v1/datasets/import` | Validate and activate CSV/XLSX data |
 | `POST` | `/api/v1/datasets/reset` | Return to the reproducible demo dataset |
 | `GET` | `/api/v1/products` | Product inventory and risk table |
@@ -145,4 +162,4 @@ Release history is documented in [CHANGELOG.md](CHANGELOG.md).
 ## Repository Name and Description
 
 **Name:** `demandpilot`
-**GitHub description:** `AI-powered inventory decision platform with demand forecasting, SKU context, action workflow, and Draft PO exports.`
+**GitHub description:** `AI-powered inventory decision platform with data readiness, forecast model selection, action workflow, and Draft PO exports.`

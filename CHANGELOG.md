@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0 - Data Control and Forecast Readiness
+
+- Added active dataset preview API for normalized planning rows
+- Added quality score, acceptance rate, history coverage, and forecast-readiness metadata
+- Added Data Control dashboard panel with active sample rows and data-quality warnings
+- Rebuilt the import modal into a Dataset Readiness Center
+- Added downloadable CSV template for sales-history imports
+- Added weighted moving-average forecast candidate
+- Added forecast model leaderboard with MAE and WAPE
+- Cleared stale draft/action workflow state after dataset switches
+- Expanded backend API coverage for dataset preview
+
 ## 0.4.0 - Decision Workflow
 
 - Added working Action Queue filters for all, critical, reorder, and excess-stock recommendations

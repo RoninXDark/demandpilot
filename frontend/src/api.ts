@@ -2,21 +2,30 @@ import type {
   ActionRecommendation,
   DashboardSummary,
   DatasetInfo,
+  DatasetPreview,
   ForecastResponse,
   InventoryProduct,
   PurchaseOrderDraft,
   ScenarioRequest,
   ScenarioResponse,
 } from "./types";
+import { offlineResponse } from "./mockData";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "/api/v1";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const isFormData = options?.body instanceof FormData;
-  const response = await fetch(`${API_URL}${path}`, {
-    headers: isFormData ? undefined : { "Content-Type": "application/json" },
-    ...options,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      headers: isFormData ? undefined : { "Content-Type": "application/json" },
+      ...options,
+    });
+  } catch (caught) {
+    const fallback = offlineResponse<T>(path, options);
+    if (fallback) return fallback;
+    throw caught;
+  }
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
     const message =
@@ -30,6 +39,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export const api = {
   activeDataset: () => request<DatasetInfo>("/datasets/active"),
+  activeDatasetPreview: (limit = 8) =>
+    request<DatasetPreview>(`/datasets/active/preview?limit=${limit}`),
   importDataset: (file: File) => {
     const data = new FormData();
     data.append("file", file);

@@ -25,6 +25,15 @@ At least 14 distinct dates are required. Ninety or more days are recommended for
 
 Missing optional inventory fields do not block an import. DemandPilot reports every applied default in the data-quality warnings.
 
+The dashboard also reports:
+
+- quality score
+- acceptance rate
+- accepted, rejected, duplicate, and missing-value counts
+- unique product and store counts
+- total history days
+- forecast-readiness status
+
 ## Example
 
 ```csv
@@ -42,3 +51,5 @@ date,store_id,product_id,product_name,category,units_sold,unit_price,stock_on_ha
 - The import fails when fewer than 14 valid dates remain.
 
 Imported files are normalized to DemandPilot's canonical schema and stored locally under the ignored `data/uploads/` directory. Original uploads and runtime metadata are never committed to Git.
+
+The active dataset preview endpoint returns the normalized fields that are currently feeding the Action Queue and forecast engine.

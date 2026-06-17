@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -33,6 +34,10 @@ class DataQualityReport(BaseModel):
     unique_stores: int
     date_start: date
     date_end: date
+    history_days: int
+    acceptance_rate: float
+    quality_score: int
+    readiness: str
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -43,6 +48,11 @@ class DatasetInfo(BaseModel):
     source: str
     activated_at: datetime
     quality: DataQualityReport
+
+
+class DatasetPreview(BaseModel):
+    columns: list[str]
+    rows: list[dict[str, Any]]
 
 
 class InventoryProduct(BaseModel):
@@ -69,6 +79,13 @@ class ForecastPoint(BaseModel):
     upper: float
 
 
+class ForecastModelCandidate(BaseModel):
+    rank: int
+    name: str
+    validation_mae: float
+    validation_wape: float
+
+
 class ForecastResponse(BaseModel):
     product_id: str
     product_name: str
@@ -76,6 +93,7 @@ class ForecastResponse(BaseModel):
     model_name: str
     validation_mae: float
     validation_wape: float
+    model_candidates: list[ForecastModelCandidate]
     history: list[TimePoint]
     forecast: list[ForecastPoint]
 

@@ -49,6 +49,22 @@ export type DatasetPreview = {
   rows: Record<string, string | number | null>[];
 };
 
+export type DatasetColumnMapping = {
+  source_column: string;
+  canonical_column: string;
+  mapping_type: "direct" | "alias" | "ignored";
+};
+
+export type DatasetImportPreview = {
+  dataset: DatasetInfo;
+  preview: DatasetPreview;
+  column_mappings: DatasetColumnMapping[];
+};
+
+export type DatasetHistoryItem = DatasetInfo & {
+  status: "active" | "ready" | "archived" | "demo";
+};
+
 export type ForecastModelCandidate = {
   rank: number;
   name: string;

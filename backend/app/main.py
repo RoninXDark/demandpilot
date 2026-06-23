@@ -9,6 +9,8 @@ from app.config import get_settings
 from app.schemas import (
     ActionRecommendation,
     DashboardSummary,
+    DatasetHistoryItem,
+    DatasetImportPreview,
     DatasetInfo,
     DatasetPreview,
     ForecastResponse,
@@ -46,7 +48,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.5.0",
+    version="0.6.0",
     description="Demand forecasting and inventory decision API.",
     lifespan=lifespan,
 )
@@ -70,6 +72,14 @@ def get_active_dataset() -> DatasetInfo:
 
 
 @app.get(
+    f"{settings.api_prefix}/datasets",
+    response_model=list[DatasetHistoryItem],
+)
+def get_datasets() -> list[DatasetHistoryItem]:
+    return dataset_registry.list_datasets()
+
+
+@app.get(
     f"{settings.api_prefix}/datasets/active/preview",
     response_model=DatasetPreview,
 )
@@ -77,6 +87,41 @@ def get_active_dataset_preview(
     limit: int = Query(default=8, ge=1, le=25),
 ) -> DatasetPreview:
     return dataset_registry.active_preview(limit)
+
+
+@app.post(
+    f"{settings.api_prefix}/datasets/preview",
+    response_model=DatasetImportPreview,
+)
+async def preview_dataset(file: UploadFile = File(...)) -> DatasetImportPreview:
+    content = await file.read(settings.max_upload_bytes + 1)
+    if len(content) > settings.max_upload_bytes:
+        raise HTTPException(status_code=413, detail="File exceeds the 10 MB limit.")
+    try:
+        return dataset_registry.stage_file(file.filename or "dataset.csv", content)
+    except DatasetValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post(
+    f"{settings.api_prefix}/datasets/{{dataset_id}}/activate",
+    response_model=DatasetInfo,
+)
+def activate_dataset(dataset_id: str) -> DatasetInfo:
+    try:
+        return dataset_registry.activate_dataset(dataset_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Dataset not found") from exc
+
+
+@app.delete(f"{settings.api_prefix}/datasets/{{dataset_id}}", status_code=204)
+def discard_dataset(dataset_id: str) -> None:
+    try:
+        dataset_registry.discard_dataset(dataset_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Dataset not found") from exc
+    except DatasetValidationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.post(f"{settings.api_prefix}/datasets/import", response_model=DatasetInfo)

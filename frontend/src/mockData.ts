@@ -1,6 +1,8 @@
 import type {
   ActionRecommendation,
   DashboardSummary,
+  DatasetHistoryItem,
+  DatasetImportPreview,
   DatasetInfo,
   DatasetPreview,
   ForecastResponse,
@@ -250,6 +252,9 @@ function buildForecast(productId: string, horizon: number): ForecastResponse {
   };
 }
 
+let offlineActiveDataset: DatasetInfo = dataset;
+let offlineStagedDataset: DatasetInfo | null = null;
+
 function offlineImportDataset(options?: RequestInit): DatasetInfo {
   const file = options?.body instanceof FormData ? options.body.get("file") : null;
   const filename = file instanceof File ? file.name : "offline-sales.csv";
@@ -260,6 +265,40 @@ function offlineImportDataset(options?: RequestInit): DatasetInfo {
     filename,
     source: "upload",
   };
+}
+
+function offlineStageDataset(options?: RequestInit): DatasetImportPreview {
+  offlineStagedDataset = offlineImportDataset(options);
+  return {
+    dataset: offlineStagedDataset,
+    preview,
+    column_mappings: [
+      { source_column: "Order Date", canonical_column: "date", mapping_type: "alias" },
+      { source_column: "SKU", canonical_column: "product_id", mapping_type: "alias" },
+      { source_column: "Quantity", canonical_column: "units_sold", mapping_type: "alias" },
+      { source_column: "Price", canonical_column: "unit_price", mapping_type: "alias" },
+      { source_column: "Store", canonical_column: "store_id", mapping_type: "alias" },
+    ],
+  };
+}
+
+function offlineHistory(): DatasetHistoryItem[] {
+  const items: DatasetHistoryItem[] = [
+    {
+      ...dataset,
+      status: offlineActiveDataset.dataset_id === dataset.dataset_id ? "active" : "demo",
+    },
+  ];
+  if (offlineStagedDataset) {
+    items.unshift({
+      ...offlineStagedDataset,
+      status:
+        offlineActiveDataset.dataset_id === offlineStagedDataset.dataset_id
+          ? "active"
+          : "ready",
+    });
+  }
+  return items;
 }
 
 export function offlineResponse<T>(path: string, options?: RequestInit): T | null {
@@ -301,10 +340,27 @@ export function offlineResponse<T>(path: string, options?: RequestInit): T | nul
       revenue_by_product: [],
     } satisfies DashboardSummary as T;
   }
-  if (path === "/datasets/active") return dataset as T;
+  if (path === "/datasets/active") return offlineActiveDataset as T;
+  if (path === "/datasets") return offlineHistory() as T;
   if (path.startsWith("/datasets/active/preview")) return preview as T;
+  if (path === "/datasets/preview") return offlineStageDataset(options) as T;
+  if (path.startsWith("/datasets/") && path.endsWith("/activate")) {
+    const datasetId = path.split("/")[2];
+    if (offlineStagedDataset?.dataset_id === datasetId) {
+      offlineActiveDataset = offlineStagedDataset;
+    }
+    return offlineActiveDataset as T;
+  }
+  if (path.startsWith("/datasets/") && options?.method === "DELETE") {
+    offlineStagedDataset = null;
+    return undefined as T;
+  }
   if (path === "/datasets/import") return offlineImportDataset(options) as T;
-  if (path === "/datasets/reset") return dataset as T;
+  if (path === "/datasets/reset") {
+    offlineActiveDataset = dataset;
+    offlineStagedDataset = null;
+    return dataset as T;
+  }
   if (path === "/products") return products as T;
   if (path === "/actions") return actions as T;
   if (path.startsWith("/actions/") && path.endsWith("/draft")) {

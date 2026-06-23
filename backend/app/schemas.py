@@ -55,6 +55,22 @@ class DatasetPreview(BaseModel):
     rows: list[dict[str, Any]]
 
 
+class DatasetColumnMapping(BaseModel):
+    source_column: str
+    canonical_column: str
+    mapping_type: str
+
+
+class DatasetImportPreview(BaseModel):
+    dataset: DatasetInfo
+    preview: DatasetPreview
+    column_mappings: list[DatasetColumnMapping]
+
+
+class DatasetHistoryItem(DatasetInfo):
+    status: str
+
+
 class InventoryProduct(BaseModel):
     product_id: str
     product_name: str

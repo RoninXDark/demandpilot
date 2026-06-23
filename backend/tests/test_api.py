@@ -71,3 +71,31 @@ def test_dataset_preview_endpoint():
     payload = response.json()
     assert "date" in payload["columns"]
     assert len(payload["rows"]) == 3
+
+
+def test_dataset_lifecycle_endpoints(tmp_path: Path, monkeypatch):
+    demo_path = generate_demo_dataset(tmp_path / "demo.csv", days=120)
+    test_registry = DatasetRegistry(demo_path, tmp_path / "uploads")
+    monkeypatch.setattr(main_module, "dataset_registry", test_registry)
+    dates = "\n".join(
+        f"2026-02-{day:02d},sku-lifecycle,{day},19"
+        for day in range(1, 21)
+    )
+    content = f"order_date,sku,quantity,price\n{dates}\n"
+
+    with TestClient(app) as client:
+        preview = client.post(
+            "/api/v1/datasets/preview",
+            files={"file": ("lifecycle.csv", content, "text/csv")},
+        )
+        dataset_id = preview.json()["dataset"]["dataset_id"]
+        active_before = client.get("/api/v1/datasets/active")
+        history = client.get("/api/v1/datasets")
+        activated = client.post(f"/api/v1/datasets/{dataset_id}/activate")
+
+    assert preview.status_code == 200
+    assert preview.json()["dataset"]["quality"]["accepted_rows"] == 20
+    assert active_before.json()["source"] == "demo"
+    assert any(item["status"] == "ready" for item in history.json())
+    assert activated.status_code == 200
+    assert activated.json()["dataset_id"] == dataset_id

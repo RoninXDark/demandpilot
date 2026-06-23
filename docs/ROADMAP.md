@@ -50,8 +50,10 @@
 - [x] Forecast model leaderboard
 - [x] Weighted moving-average candidate
 - [x] Dataset-switch cleanup for local workflow state
-- [ ] Upload preview before activation
-- [ ] Dataset version history
+- [x] Upload preview before activation
+- [x] Explicit activation and staged-dataset discard
+- [x] Dataset history and restore controls
+- [ ] Dataset version labels and user annotations
 
 ## Sprint 6 - Forecasting Lab
 

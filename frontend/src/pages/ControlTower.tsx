@@ -59,6 +59,8 @@ import type {
   ActionRecommendation,
   DashboardMetric,
   DashboardSummary,
+  DatasetHistoryItem,
+  DatasetImportPreview,
   DatasetInfo,
   DatasetPreview,
   ForecastResponse,
@@ -264,6 +266,7 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
   const [products, setProducts] = useState<InventoryProduct[]>([]);
   const [actions, setActions] = useState<ActionRecommendation[]>([]);
   const [dataset, setDataset] = useState<DatasetInfo | null>(null);
+  const [datasetHistory, setDatasetHistory] = useState<DatasetHistoryItem[]>([]);
   const [datasetPreview, setDatasetPreview] = useState<DatasetPreview | null>(null);
   const [forecast, setForecast] = useState<ForecastResponse | null>(null);
   const [scenario, setScenario] = useState<ScenarioResponse | null>(null);
@@ -297,25 +300,28 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
   const [importOpen, setImportOpen] = useState(initialParams.has("data-control"));
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [stagedDataset, setStagedDataset] = useState<DatasetImportPreview | null>(null);
   const [importResult, setImportResult] = useState<DatasetInfo | null>(null);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [summaryData, productData, actionData, datasetData, previewData] =
+      const [summaryData, productData, actionData, datasetData, previewData, historyData] =
         await Promise.all([
           api.summary(),
           api.products(),
           api.actions(),
           api.activeDataset(),
           api.activeDatasetPreview(8),
+          api.datasets(),
         ]);
       setSummary(summaryData);
       setProducts(productData);
       setActions(actionData);
       setDataset(datasetData);
       setDatasetPreview(previewData);
+      setDatasetHistory(historyData);
       setSelectedProduct((current) =>
         productData.some((item) => item.product_id === current)
           ? current
@@ -469,6 +475,13 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
   const quality = dataset?.quality;
   const qualityScore = quality?.quality_score ?? 0;
   const previewColumns = datasetPreview?.columns.slice(0, 6) ?? [];
+  const lifecycleDataset = stagedDataset?.dataset ?? dataset;
+  const lifecycleQuality = lifecycleDataset?.quality ?? quality;
+  const lifecyclePreview = stagedDataset?.preview ?? datasetPreview;
+  const lifecycleColumns = lifecyclePreview?.columns.slice(0, 6) ?? [];
+  const mappedColumns = stagedDataset?.column_mappings.filter(
+    (mapping) => mapping.mapping_type !== "ignored",
+  ) ?? [];
   const modelCandidates = forecast?.model_candidates.slice(0, 3) ?? [];
 
   function updateActionStatus(
@@ -493,19 +506,94 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
     setDrawerOpen(true);
   }
 
-  async function importDataset() {
+  function clearDecisionWorkflow() {
+    setScenario(null);
+    setDrafts({});
+    setActionStates({});
+  }
+
+  async function previewDataset() {
     if (!selectedFile) return;
     setUploading(true);
     setError("");
     try {
-      const result = await api.importDataset(selectedFile);
+      const result = await api.previewDataset(selectedFile);
+      setStagedDataset(result);
+      setImportResult(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Dataset preview failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function activateStagedDataset() {
+    if (!stagedDataset) return;
+    setUploading(true);
+    setError("");
+    try {
+      const result = await api.activateDataset(stagedDataset.dataset.dataset_id);
       setImportResult(result);
-      setScenario(null);
-      setDrafts({});
-      setActionStates({});
+      setSelectedFile(null);
+      setStagedDataset(null);
+      clearDecisionWorkflow();
       await loadDashboard();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Import failed");
+      setError(caught instanceof Error ? caught.message : "Dataset activation failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function discardStagedDataset() {
+    if (!stagedDataset) return;
+    setUploading(true);
+    try {
+      await api.discardDataset(stagedDataset.dataset.dataset_id);
+      setStagedDataset(null);
+      setSelectedFile(null);
+      setImportResult(null);
+      await loadDashboard();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to discard dataset");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function activateHistoryDataset(item: DatasetHistoryItem) {
+    if (item.status === "active") return;
+    setUploading(true);
+    setError("");
+    try {
+      const result =
+        item.source === "demo"
+          ? await api.resetDataset()
+          : await api.activateDataset(item.dataset_id);
+      setImportResult(result);
+      setStagedDataset(null);
+      setSelectedFile(null);
+      clearDecisionWorkflow();
+      await loadDashboard();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to activate dataset");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function discardHistoryDataset(item: DatasetHistoryItem) {
+    if (item.status === "active") return;
+    setUploading(true);
+    try {
+      await api.discardDataset(item.dataset_id);
+      if (stagedDataset?.dataset.dataset_id === item.dataset_id) {
+        setStagedDataset(null);
+        setSelectedFile(null);
+      }
+      await loadDashboard();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to discard dataset");
     } finally {
       setUploading(false);
     }
@@ -517,9 +605,8 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
       const result = await api.resetDataset();
       setImportResult(result);
       setSelectedFile(null);
-      setScenario(null);
-      setDrafts({});
-      setActionStates({});
+      setStagedDataset(null);
+      clearDecisionWorkflow();
       await loadDashboard();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Reset failed");
@@ -1263,8 +1350,8 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
             <header>
               <div>
                 <span className="eyebrow">Data Control</span>
-                <h2>Dataset readiness center</h2>
-                <p>Validate sales history, inspect active rows, and refresh the forecast engine.</p>
+                <h2>Dataset lifecycle</h2>
+                <p>Stage, validate, activate, and restore planning datasets with a full audit trail.</p>
               </div>
               <button className="icon-command" onClick={() => setImportOpen(false)} title="Close">
                 <X size={18} />
@@ -1272,49 +1359,63 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
             </header>
             <div className="data-modal-grid">
               <aside className="data-profile-card">
-                <span className={`data-score-orb ${scoreClass(qualityScore)}`}>
-                  {qualityScore}
+                <span className={`data-score-orb ${scoreClass(lifecycleQuality?.quality_score)}`}>
+                  {lifecycleQuality?.quality_score ?? "--"}
                 </span>
                 <div>
-                  <strong>{quality?.readiness ?? "Dataset profile loading"}</strong>
+                  <strong>
+                    {stagedDataset ? "Ready to activate" : lifecycleQuality?.readiness ?? "Dataset profile loading"}
+                  </strong>
                   <p>
-                    {dataset?.source === "upload" ? dataset.name : "Demo Retail Operations"}
+                    {lifecycleDataset?.source === "upload" ? lifecycleDataset.name : "Demo Retail Operations"}
                   </p>
                 </div>
                 <dl>
                   <div>
                     <dt>Accepted rows</dt>
-                    <dd>{quality?.accepted_rows.toLocaleString() ?? "--"}</dd>
+                    <dd>{lifecycleQuality?.accepted_rows.toLocaleString() ?? "--"}</dd>
                   </div>
                   <div>
                     <dt>Acceptance</dt>
-                    <dd>{quality?.acceptance_rate ?? "--"}%</dd>
+                    <dd>{lifecycleQuality?.acceptance_rate ?? "--"}%</dd>
                   </div>
                   <div>
                     <dt>Products</dt>
-                    <dd>{quality?.unique_products ?? "--"}</dd>
+                    <dd>{lifecycleQuality?.unique_products ?? "--"}</dd>
                   </div>
                   <div>
                     <dt>History</dt>
-                    <dd>{quality?.history_days ?? "--"} days</dd>
+                    <dd>{lifecycleQuality?.history_days ?? "--"} days</dd>
                   </div>
                 </dl>
                 <div className="profile-range">
-                  <span>{quality?.date_start ?? "--"}</span>
+                  <span>{lifecycleQuality?.date_start ?? "--"}</span>
                   <i />
-                  <span>{quality?.date_end ?? "--"}</span>
+                  <span>{lifecycleQuality?.date_end ?? "--"}</span>
                 </div>
               </aside>
 
               <div className="data-import-stack">
                 <label className="file-drop">
                   <Upload size={24} />
-                  <strong>{selectedFile?.name ?? "Choose a CSV or XLSX file"}</strong>
-                  <span>Maximum 10 MB. Required fields are mapped automatically.</span>
+                  <strong>
+                    {stagedDataset
+                      ? `${stagedDataset.dataset.name} is staged`
+                      : selectedFile?.name ?? "Choose a CSV or XLSX file"}
+                  </strong>
+                  <span>
+                    {stagedDataset
+                      ? "Validation passed. Review mappings and activate when ready."
+                      : "Maximum 10 MB. Required fields are mapped automatically."}
+                  </span>
                   <input
                     type="file"
                     accept=".csv,.xlsx"
-                    onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                    onChange={(event) => {
+                      setSelectedFile(event.target.files?.[0] ?? null);
+                      setStagedDataset(null);
+                      setImportResult(null);
+                    }}
                   />
                 </label>
                 <div className="schema-panel">
@@ -1335,6 +1436,24 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
                     </div>
                   </div>
                 </div>
+                {stagedDataset && (
+                  <div className="mapping-panel">
+                    <div className="mapping-heading">
+                      <span><FileSpreadsheet size={14} /> Detected column mapping</span>
+                      <b>{mappedColumns.length} fields mapped</b>
+                    </div>
+                    <div className="mapping-list">
+                      {mappedColumns.map((mapping) => (
+                        <div key={`${mapping.source_column}-${mapping.canonical_column}`}>
+                          <span>{mapping.source_column}</span>
+                          <i>to</i>
+                          <strong>{mapping.canonical_column}</strong>
+                          <em>{mapping.mapping_type}</em>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {importResult && (
                   <div className="quality-result">
                     <span className="quality-check"><Check size={18} /></span>
@@ -1350,7 +1469,10 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
 
               <div className="data-preview-card">
                 <div className="data-preview-title">
-                  <span><FileSpreadsheet size={15} /> Active dataset preview</span>
+                  <span>
+                    <FileSpreadsheet size={15} />
+                    {stagedDataset ? "Staged dataset preview" : "Active dataset preview"}
+                  </span>
                   <button onClick={downloadCsvTemplate}>
                     <FileDown size={14} />
                     Template
@@ -1360,15 +1482,15 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
                   <table>
                     <thead>
                       <tr>
-                        {previewColumns.map((column) => (
+                        {lifecycleColumns.map((column) => (
                           <th key={column}>{column}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {datasetPreview?.rows.map((row, index) => (
+                      {lifecyclePreview?.rows.map((row, index) => (
                         <tr key={`${row.product_id ?? "preview"}-${index}`}>
-                          {previewColumns.map((column) => (
+                          {lifecycleColumns.map((column) => (
                             <td key={column}>{formatPreviewValue(row[column])}</td>
                           ))}
                         </tr>
@@ -1376,9 +1498,9 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
                     </tbody>
                   </table>
                 </div>
-                {quality?.warnings.length ? (
+                {lifecycleQuality?.warnings.length ? (
                   <ul className="data-warnings modal-warnings">
-                    {quality.warnings.map((warning) => (
+                    {lifecycleQuality.warnings.map((warning) => (
                       <li key={warning}>{warning}</li>
                     ))}
                   </ul>
@@ -1388,6 +1510,46 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
                     Dataset is ready for forecast and replenishment calculations.
                   </div>
                 )}
+              </div>
+              <div className="dataset-history-card">
+                <div className="history-heading">
+                  <span><Archive size={15} /> Dataset history</span>
+                  <b>{datasetHistory.length} available</b>
+                </div>
+                <div className="dataset-history-list">
+                  {datasetHistory.map((item) => (
+                    <article className={`dataset-history-row status-${item.status}`} key={item.dataset_id}>
+                      <div>
+                        <strong>{item.name}</strong>
+                        <span>
+                          {item.quality.accepted_rows.toLocaleString()} rows - {item.quality.quality_score} score - {item.quality.history_days} days
+                        </span>
+                      </div>
+                      <em>{item.status}</em>
+                      {item.status === "active" ? (
+                        <span className="active-dataset-label">Active</span>
+                      ) : (
+                        <div className="history-row-actions">
+                          {item.status === "ready" && (
+                            <button
+                              className="history-discard"
+                              onClick={() => void discardHistoryDataset(item)}
+                              disabled={uploading}
+                            >
+                              Discard
+                            </button>
+                          )}
+                          <button
+                            onClick={() => void activateHistoryDataset(item)}
+                            disabled={uploading}
+                          >
+                            Activate
+                          </button>
+                        </div>
+                      )}
+                    </article>
+                  ))}
+                </div>
               </div>
             </div>
             <footer>
@@ -1402,9 +1564,20 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
               </div>
               <div>
                 <button className="button-outline dark-outline" onClick={() => setImportOpen(false)}>Cancel</button>
-                <button className="button-solid compact" disabled={!selectedFile || uploading} onClick={() => void importDataset()}>
-                  {uploading ? "Validating..." : "Import & activate"}
-                </button>
+                {stagedDataset ? (
+                  <>
+                    <button className="button-quiet" disabled={uploading} onClick={() => void discardStagedDataset()}>
+                      Discard staged
+                    </button>
+                    <button className="button-solid compact" disabled={uploading} onClick={() => void activateStagedDataset()}>
+                      {uploading ? "Activating..." : "Activate dataset"}
+                    </button>
+                  </>
+                ) : (
+                  <button className="button-solid compact" disabled={!selectedFile || uploading} onClick={() => void previewDataset()}>
+                    {uploading ? "Validating..." : "Validate file"}
+                  </button>
+                )}
               </div>
             </footer>
           </section>

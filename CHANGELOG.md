@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0 - Dataset Lifecycle
+
+- Added two-phase dataset handling: stage and validate before activation
+- Added detected source-to-canonical column mapping for CSV/XLSX imports
+- Added explicit dataset activation and staged-dataset discard actions
+- Added persistent dataset history with active, ready, archived, and demo states
+- Added restore controls for previous uploads and the reproducible demo dataset
+- Preserved legacy active-dataset metadata during the registry migration
+- Expanded backend coverage for staging, activation, discard, and lifecycle API contracts
+
 ## 0.5.0 - Data Control and Forecast Readiness
 
 - Added active dataset preview API for normalized planning rows

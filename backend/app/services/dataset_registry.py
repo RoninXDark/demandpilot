@@ -10,7 +10,14 @@ from uuid import uuid4
 import pandas as pd
 from pydantic import ValidationError
 
-from app.schemas import DataQualityReport, DatasetInfo, DatasetPreview
+from app.schemas import (
+    DataQualityReport,
+    DatasetColumnMapping,
+    DatasetHistoryItem,
+    DatasetImportPreview,
+    DatasetInfo,
+    DatasetPreview,
+)
 
 
 CORE_COLUMNS = {"date", "product_id", "units_sold", "unit_price"}
@@ -67,16 +74,27 @@ class DatasetRegistry:
         self.demo_path = demo_path
         self.uploads_path = uploads_path
         self.metadata_path = uploads_path / "active-dataset.json"
+        self.catalog_path = uploads_path / "datasets.json"
 
     def active_path(self) -> Path:
+        active_record = self._active_record()
+        if active_record:
+            candidate = self._record_path(active_record)
+            if candidate:
+                return candidate
+
         metadata = self._read_metadata()
         if metadata:
-            candidate = Path(metadata["file_path"])
-            if candidate.exists() and candidate.resolve().parent == self.uploads_path.resolve():
+            candidate = Path(str(metadata.get("file_path", "")))
+            if self._is_upload_path(candidate):
                 return candidate
         return self.demo_path
 
     def active_info(self) -> DatasetInfo:
+        active_record = self._active_record()
+        if active_record:
+            return self._record_info(active_record)
+
         metadata = self._read_metadata()
         if metadata and self.active_path() != self.demo_path:
             try:
@@ -96,23 +114,143 @@ class DatasetRegistry:
                     quality=quality,
                 )
 
-        frame = pd.read_csv(self.demo_path)
-        _, quality = self._normalize(frame)
-        activated_at = datetime.fromtimestamp(
-            self.demo_path.stat().st_mtime,
-            tz=timezone.utc,
+        return self._demo_info()
+
+    def list_datasets(self) -> list[DatasetHistoryItem]:
+        catalog = self._catalog()
+        active_id = catalog["active_dataset_id"]
+        items: list[DatasetHistoryItem] = []
+        for record in catalog["datasets"]:
+            if not self._record_path(record):
+                continue
+            status = "active" if record["dataset"]["dataset_id"] == active_id else record["status"]
+            items.append(
+                DatasetHistoryItem(
+                    **self._record_info(record).model_dump(),
+                    status=status,
+                )
+            )
+
+        legacy = self._legacy_history_item()
+        if legacy and not any(item.dataset_id == legacy.dataset_id for item in items):
+            items.append(legacy)
+
+        demo = self._demo_info()
+        items.append(
+            DatasetHistoryItem(
+                **demo.model_dump(),
+                status="active" if not self._active_record() and not legacy else "demo",
+            )
         )
-        return DatasetInfo(
-            dataset_id="demo-retail",
-            name="Demo Retail Operations",
-            filename=self.demo_path.name,
-            source="demo",
-            activated_at=activated_at,
-            quality=quality,
+        return sorted(
+            items,
+            key=lambda item: (item.status != "active", item.activated_at),
         )
 
     def active_preview(self, limit: int = 8) -> DatasetPreview:
         frame = pd.read_csv(self.active_path())
+        return self._preview_from_frame(frame, limit)
+
+    def stage_file(self, filename: str, content: bytes) -> DatasetImportPreview:
+        source = self._read_source(filename, content)
+        column_mappings = self._column_mappings(source)
+        normalized, quality = self._normalize(source)
+        dataset_id = uuid4().hex[:12]
+        safe_name = _safe_stem(filename)
+        stored_path = self.uploads_path / f"{dataset_id}-{safe_name}.csv"
+        self.uploads_path.mkdir(parents=True, exist_ok=True)
+        normalized.to_csv(stored_path, index=False)
+
+        info = DatasetInfo(
+            dataset_id=dataset_id,
+            name=Path(filename).stem,
+            filename=filename,
+            source="upload",
+            activated_at=datetime.now(timezone.utc),
+            quality=quality,
+        )
+        catalog = self._catalog_with_legacy()
+        catalog["datasets"].append(
+            {
+                "dataset": info.model_dump(mode="json"),
+                "file_path": str(stored_path.resolve()),
+                "status": "ready",
+                "column_mappings": [
+                    mapping.model_dump() for mapping in column_mappings
+                ],
+            }
+        )
+        self._write_catalog(catalog)
+        return DatasetImportPreview(
+            dataset=info,
+            preview=self._preview_from_frame(normalized, limit=8),
+            column_mappings=column_mappings,
+        )
+
+    def activate_dataset(self, dataset_id: str) -> DatasetInfo:
+        catalog = self._catalog_with_legacy()
+        selected = next(
+            (
+                record
+                for record in catalog["datasets"]
+                if record["dataset"]["dataset_id"] == dataset_id
+            ),
+            None,
+        )
+        if selected is None or not self._record_path(selected):
+            raise KeyError(dataset_id)
+
+        previous_id = catalog["active_dataset_id"]
+        for record in catalog["datasets"]:
+            if record["dataset"]["dataset_id"] == previous_id:
+                record["status"] = "archived"
+        selected["status"] = "active"
+        catalog["active_dataset_id"] = dataset_id
+        self._write_catalog(catalog)
+        self._write_active_metadata(selected)
+        return self._record_info(selected)
+
+    def discard_dataset(self, dataset_id: str) -> None:
+        catalog = self._catalog_with_legacy()
+        record = next(
+            (
+                item
+                for item in catalog["datasets"]
+                if item["dataset"]["dataset_id"] == dataset_id
+            ),
+            None,
+        )
+        if record is None:
+            raise KeyError(dataset_id)
+        if record["dataset"]["dataset_id"] == catalog["active_dataset_id"]:
+            raise DatasetValidationError("The active dataset cannot be discarded.")
+
+        stored_path = self._record_path(record)
+        if stored_path and stored_path.exists():
+            stored_path.unlink()
+        catalog["datasets"] = [
+            item
+            for item in catalog["datasets"]
+            if item["dataset"]["dataset_id"] != dataset_id
+        ]
+        self._write_catalog(catalog)
+
+    def import_file(self, filename: str, content: bytes) -> DatasetInfo:
+        staged = self.stage_file(filename, content)
+        return self.activate_dataset(staged.dataset.dataset_id)
+
+    def reset(self) -> DatasetInfo:
+        catalog = self._catalog_with_legacy()
+        for record in catalog["datasets"]:
+            if record["dataset"]["dataset_id"] == catalog["active_dataset_id"]:
+                record["status"] = "archived"
+        catalog["active_dataset_id"] = None
+        self._write_catalog(catalog)
+        if self.metadata_path.exists():
+            self.metadata_path.unlink()
+        return self.active_info()
+
+    def _preview_from_frame(self, frame: pd.DataFrame, limit: int) -> DatasetPreview:
         visible = [column for column in STANDARD_COLUMNS if column in frame.columns]
         preview = frame.loc[:, visible].head(limit)
         preview = preview.where(pd.notna(preview), None)
@@ -121,7 +259,7 @@ class DatasetRegistry:
             rows=preview.to_dict(orient="records"),
         )
 
-    def import_file(self, filename: str, content: bytes) -> DatasetInfo:
+    def _read_source(self, filename: str, content: bytes) -> pd.DataFrame:
         suffix = Path(filename).suffix.lower()
         if suffix not in {".csv", ".xlsx"}:
             raise DatasetValidationError("Only CSV and XLSX files are supported.")
@@ -137,36 +275,163 @@ class DatasetRegistry:
             raise DatasetValidationError(
                 "The file could not be parsed. Check its format and encoding."
             ) from exc
+        return frame
 
-        normalized, quality = self._normalize(frame)
-        dataset_id = uuid4().hex[:12]
-        safe_name = _safe_stem(filename)
-        stored_path = self.uploads_path / f"{dataset_id}-{safe_name}.csv"
-        self.uploads_path.mkdir(parents=True, exist_ok=True)
-        normalized.to_csv(stored_path, index=False)
+    def _column_mappings(self, source: pd.DataFrame) -> list[DatasetColumnMapping]:
+        mappings: list[DatasetColumnMapping] = []
+        for column in source.columns:
+            source_column = str(column)
+            normalized = re.sub(
+                r"[^a-z0-9]+",
+                "_",
+                source_column.strip().lower(),
+            ).strip("_")
+            canonical = COLUMN_ALIASES.get(normalized, normalized)
+            if canonical != normalized:
+                mapping_type = "alias"
+            elif canonical in STANDARD_COLUMNS:
+                mapping_type = "direct"
+            else:
+                mapping_type = "ignored"
+            mappings.append(
+                DatasetColumnMapping(
+                    source_column=source_column,
+                    canonical_column=canonical,
+                    mapping_type=mapping_type,
+                )
+            )
+        return mappings
 
-        info = DatasetInfo(
-            dataset_id=dataset_id,
-            name=Path(filename).stem,
-            filename=filename,
-            source="upload",
-            activated_at=datetime.now(timezone.utc),
-            quality=quality,
-        )
-        metadata = {
-            "file_path": str(stored_path.resolve()),
-            "dataset": info.model_dump(mode="json"),
+    def _catalog(self) -> dict[str, object]:
+        if not self.catalog_path.exists():
+            return {"active_dataset_id": None, "datasets": []}
+        try:
+            payload = json.loads(self.catalog_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return {"active_dataset_id": None, "datasets": []}
+        if not isinstance(payload, dict):
+            return {"active_dataset_id": None, "datasets": []}
+        active_id = payload.get("active_dataset_id")
+        datasets = payload.get("datasets")
+        return {
+            "active_dataset_id": active_id if isinstance(active_id, str) else None,
+            "datasets": [item for item in datasets if isinstance(item, dict)]
+            if isinstance(datasets, list)
+            else [],
         }
-        self.metadata_path.write_text(
-            json.dumps(metadata, indent=2),
+
+    def _catalog_with_legacy(self) -> dict[str, object]:
+        catalog = self._catalog()
+        if catalog["datasets"]:
+            return catalog
+        metadata = self._read_metadata()
+        if not metadata:
+            return catalog
+        candidate = Path(str(metadata.get("file_path", "")))
+        if not self._is_upload_path(candidate):
+            return catalog
+        try:
+            info = self.active_info()
+        except (DatasetValidationError, OSError, ValueError):
+            return catalog
+        catalog["datasets"] = [
+            {
+                "dataset": info.model_dump(mode="json"),
+                "file_path": str(candidate.resolve()),
+                "status": "active",
+                "column_mappings": [],
+            }
+        ]
+        catalog["active_dataset_id"] = info.dataset_id
+        return catalog
+
+    def _write_catalog(self, catalog: dict[str, object]) -> None:
+        self.uploads_path.mkdir(parents=True, exist_ok=True)
+        self.catalog_path.write_text(
+            json.dumps(catalog, indent=2),
             encoding="utf-8",
         )
-        return info
 
-    def reset(self) -> DatasetInfo:
-        if self.metadata_path.exists():
-            self.metadata_path.unlink()
-        return self.active_info()
+    def _active_record(self) -> dict[str, object] | None:
+        catalog = self._catalog()
+        active_id = catalog["active_dataset_id"]
+        if not isinstance(active_id, str):
+            return None
+        for record in catalog["datasets"]:
+            if not isinstance(record, dict):
+                continue
+            dataset = record.get("dataset")
+            if isinstance(dataset, dict) and dataset.get("dataset_id") == active_id:
+                return record
+        return None
+
+    def _record_info(self, record: dict[str, object]) -> DatasetInfo:
+        dataset = record.get("dataset")
+        if not isinstance(dataset, dict):
+            raise DatasetValidationError("Dataset metadata is invalid.")
+        return DatasetInfo.model_validate(dataset)
+
+    def _record_path(self, record: dict[str, object]) -> Path | None:
+        candidate = Path(str(record.get("file_path", "")))
+        return candidate if self._is_upload_path(candidate) else None
+
+    def _is_upload_path(self, candidate: Path) -> bool:
+        try:
+            return (
+                candidate.exists()
+                and candidate.resolve().parent == self.uploads_path.resolve()
+            )
+        except OSError:
+            return False
+
+    def _write_active_metadata(self, record: dict[str, object]) -> None:
+        file_path = self._record_path(record)
+        if not file_path:
+            raise DatasetValidationError("Dataset file is unavailable.")
+        self.uploads_path.mkdir(parents=True, exist_ok=True)
+        self.metadata_path.write_text(
+            json.dumps(
+                {
+                    "file_path": str(file_path.resolve()),
+                    "dataset": self._record_info(record).model_dump(mode="json"),
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+    def _legacy_history_item(self) -> DatasetHistoryItem | None:
+        if self._active_record():
+            return None
+        metadata = self._read_metadata()
+        if not metadata:
+            return None
+        candidate = Path(str(metadata.get("file_path", "")))
+        if not self._is_upload_path(candidate):
+            return None
+        try:
+            return DatasetHistoryItem(
+                **self.active_info().model_dump(),
+                status="active",
+            )
+        except (DatasetValidationError, OSError, ValueError):
+            return None
+
+    def _demo_info(self) -> DatasetInfo:
+        frame = pd.read_csv(self.demo_path)
+        _, quality = self._normalize(frame)
+        activated_at = datetime.fromtimestamp(
+            self.demo_path.stat().st_mtime,
+            tz=timezone.utc,
+        )
+        return DatasetInfo(
+            dataset_id="demo-retail",
+            name="Demo Retail Operations",
+            filename=self.demo_path.name,
+            source="demo",
+            activated_at=activated_at,
+            quality=quality,
+        )
 
     def _read_metadata(self) -> dict[str, object] | None:
         if not self.metadata_path.exists():

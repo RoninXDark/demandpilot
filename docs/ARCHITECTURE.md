@@ -37,6 +37,8 @@ The dataset registry accepts CSV/XLSX input, maps common column aliases, validat
 
 The v0.5 Data Control layer adds a normalized active-dataset preview and readiness metadata: quality score, acceptance rate, date coverage, and warnings. This gives planners a clear check before trusting forecast and replenishment output.
 
+The v0.6 lifecycle adds a small local dataset catalog. New uploads are staged as canonical CSV files, profiled, and exposed with source-to-canonical column mappings before activation. Activation updates the active dataset pointer while retaining prior datasets as history entries; non-active staged datasets can be discarded. The legacy active-dataset metadata is still read during migration so existing local uploads remain usable.
+
 Runtime upload files are excluded from Git. Docker uses a dedicated uploads volume to preserve them across container restarts.
 
 ## Next Persistence Boundary

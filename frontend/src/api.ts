@@ -1,6 +1,8 @@
 import type {
   ActionRecommendation,
   DashboardSummary,
+  DatasetHistoryItem,
+  DatasetImportPreview,
   DatasetInfo,
   DatasetPreview,
   ForecastResponse,
@@ -34,13 +36,27 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
         : `Request failed with status ${response.status}`;
     throw new Error(message);
   }
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
 export const api = {
   activeDataset: () => request<DatasetInfo>("/datasets/active"),
+  datasets: () => request<DatasetHistoryItem[]>("/datasets"),
   activeDatasetPreview: (limit = 8) =>
     request<DatasetPreview>(`/datasets/active/preview?limit=${limit}`),
+  previewDataset: (file: File) => {
+    const data = new FormData();
+    data.append("file", file);
+    return request<DatasetImportPreview>("/datasets/preview", {
+      method: "POST",
+      body: data,
+    });
+  },
+  activateDataset: (datasetId: string) =>
+    request<DatasetInfo>(`/datasets/${datasetId}/activate`, { method: "POST" }),
+  discardDataset: (datasetId: string) =>
+    request<void>(`/datasets/${datasetId}`, { method: "DELETE" }),
   importDataset: (file: File) => {
     const data = new FormData();
     data.append("file", file);

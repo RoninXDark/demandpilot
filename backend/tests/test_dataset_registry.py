@@ -109,3 +109,54 @@ def test_active_info_recovers_old_upload_metadata(tmp_path):
     assert recovered.dataset_id == info.dataset_id
     assert recovered.quality.quality_score > 0
     assert recovered.quality.readiness
+
+
+def test_stage_requires_explicit_activation_and_preserves_history(tmp_path):
+    service = registry(tmp_path)
+    dates = pd.date_range("2026-01-01", periods=20, freq="D")
+    frame = pd.DataFrame(
+        {
+            "order_date": dates,
+            "sku": ["sku-preview"] * 20,
+            "quantity": [4] * 20,
+            "price": [17] * 20,
+        }
+    )
+
+    staged = service.stage_file("preview.csv", frame.to_csv(index=False).encode())
+
+    assert service.active_info().source == "demo"
+    assert staged.dataset.dataset_id != "demo-retail"
+    assert any(mapping.mapping_type == "alias" for mapping in staged.column_mappings)
+    assert any(item.status == "ready" for item in service.list_datasets())
+
+    active = service.activate_dataset(staged.dataset.dataset_id)
+
+    assert active.dataset_id == staged.dataset.dataset_id
+    assert service.active_info().dataset_id == staged.dataset.dataset_id
+    assert next(
+        item for item in service.list_datasets() if item.dataset_id == active.dataset_id
+    ).status == "active"
+
+
+def test_discard_removes_staged_dataset(tmp_path):
+    service = registry(tmp_path)
+    dates = pd.date_range("2026-01-01", periods=20, freq="D")
+    frame = pd.DataFrame(
+        {
+            "date": dates,
+            "product_id": ["sku-discard"] * 20,
+            "units_sold": [2] * 20,
+            "unit_price": [9] * 20,
+        }
+    )
+    staged = service.stage_file("discard.csv", frame.to_csv(index=False).encode())
+    staged_path = service.uploads_path / f"{staged.dataset.dataset_id}-discard.csv"
+
+    service.discard_dataset(staged.dataset.dataset_id)
+
+    assert not staged_path.exists()
+    assert all(
+        item.dataset_id != staged.dataset.dataset_id
+        for item in service.list_datasets()
+    )

@@ -50,6 +50,8 @@ date,store_id,product_id,product_name,category,units_sold,unit_price,stock_on_ha
 - Invalid dates and non-numeric sales values are rejected.
 - The import fails when fewer than 14 valid dates remain.
 
-Imported files are normalized to DemandPilot's canonical schema and stored locally under the ignored `data/uploads/` directory. Original uploads and runtime metadata are never committed to Git.
+Imported files are normalized to DemandPilot's canonical schema and staged locally under the ignored `data/uploads/` directory. Original uploads and runtime metadata are never committed to Git.
+
+The normal workflow is: preview and validate the staged dataset, inspect mappings and quality, then activate it explicitly. Activation keeps prior uploads in Dataset History so planners can restore a previous dataset or return to the demo baseline.
 
 The active dataset preview endpoint returns the normalized fields that are currently feeding the Action Queue and forecast engine.

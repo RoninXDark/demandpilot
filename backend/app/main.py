@@ -48,7 +48,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.6.0",
+    version="0.7.0",
     description="Demand forecasting and inventory decision API.",
     lifespan=lifespan,
 )

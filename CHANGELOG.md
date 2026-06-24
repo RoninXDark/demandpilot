@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0 - Product Directory and Inventory Hub
+
+- Added working Product Directory and Inventory Hub views to the application navigation
+- Added shared SKU, product, ID, and category search across operational views
+- Added category and inventory-health filters for catalog and inventory planning tables
+- Added inventory stock-position indicators against calculated reorder points
+- Added direct SKU drill-down from both catalog views into the existing decision drawer
+- Prioritized Inventory Hub rows by stockout risk and coverage duration
+- Updated product documentation and portfolio preview assets
+
 ## 0.6.0 - Dataset Lifecycle
 
 - Added two-phase dataset handling: stage and validate before activation

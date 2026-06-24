@@ -19,6 +19,8 @@ Retail teams often plan inventory in spreadsheets after stockouts or excess inve
 - Convert replenishment recommendations into downloadable Draft PO files
 - Review, dismiss, and track recommendation status through a lightweight workflow
 - Open SKU-level decision context with inventory, forecast, and AI rationale
+- Search a dedicated Product Directory by SKU, product, category, and inventory health
+- Monitor stock position, days of cover, and replenishment needs in the Inventory Hub
 - Expose every calculation through a documented REST API
 
 ## Current Product
@@ -34,6 +36,8 @@ The repository currently contains:
 - Action rationale, confidence, due date, quantity, and expected business impact
 - Action lifecycle states: Open, Draft created, Reviewed, and Dismissed
 - A SKU detail drawer with stock, cover, reorder point, forecast accuracy, and action rationale
+- Product Directory with live SKU search, category and health filters, and decision-context drill-down
+- Inventory Hub that prioritizes stock positions by coverage risk and visualizes stock against reorder points
 - A simplified Draft Purchase Order Center with CSV export
 - A deterministic retail dataset generator
 - Daily sales aggregation and KPI calculations
@@ -65,6 +69,19 @@ The v0.6 Data Control layer turns uploads into a deliberate planning lifecycle:
 5. Compare forecast model candidates through MAE and WAPE before using the selected model.
 
 Runtime uploads stay in the ignored `data/uploads/` directory and are not committed to the portfolio repository.
+
+## Product Directory and Inventory Hub
+
+![DemandPilot Product Directory](docs/assets/product-directory-preview.png)
+
+The v0.7 catalog layer turns the navigation into practical planner views instead of placeholder destinations:
+
+1. Use the shared command search to find a SKU, product name, product ID, or category.
+2. Filter the Product Directory by category and inventory health to compare core planning signals in one table.
+3. Open any SKU directly into its decision drawer, without losing the current catalog context.
+4. Use the Inventory Hub to prioritize stockout risk, compare on-hand stock to reorder points, and see suggested replenishment units.
+
+Both views are composed from the live `/products` API contract, so they update when a validated dataset becomes active.
 
 ## Decision Workflow
 
@@ -168,4 +185,4 @@ Release history is documented in [CHANGELOG.md](CHANGELOG.md).
 ## Repository Name and Description
 
 **Name:** `demandpilot`
-**GitHub description:** `AI-powered inventory decision platform with dataset lifecycle, forecast model selection, action workflow, and Draft PO exports.`
+**GitHub description:** `AI-powered inventory decision platform with Product Directory, Inventory Hub, dataset lifecycle, forecasting, and Draft PO workflow.`

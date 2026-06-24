@@ -73,18 +73,26 @@ type ControlTowerProps = {
   onExitDemo: () => void;
 };
 
+type AppView = "control-tower" | "product-directory" | "inventory-hub";
 type ActionFilter = "all" | "critical" | "reorder" | "excess";
 type ActionLifecycleStatus = "Open" | "Draft created" | "Reviewed" | "Dismissed";
+type ProductRiskFilter = "all" | InventoryProduct["risk"];
 
 const horizons = [7, 30, 90];
 
-const navigation: { label: string; icon: LucideIcon; active?: boolean }[] = [
-  { label: "Control Tower", icon: LayoutDashboard, active: true },
-  { label: "Action Center", icon: ClipboardCheck },
-  { label: "Demand Analytics", icon: BarChart3 },
-  { label: "Product Directory", icon: Box },
-  { label: "Inventory Hub", icon: Boxes },
-  { label: "Data Control", icon: Database },
+const navigation: {
+  label: string;
+  icon: LucideIcon;
+  view?: AppView;
+  anchor?: string;
+  dataControl?: boolean;
+}[] = [
+  { label: "Control Tower", icon: LayoutDashboard, view: "control-tower" },
+  { label: "Action Center", icon: ClipboardCheck, anchor: "action-center" },
+  { label: "Demand Analytics", icon: BarChart3, anchor: "forecast-workspace" },
+  { label: "Product Directory", icon: Box, view: "product-directory" },
+  { label: "Inventory Hub", icon: Boxes, view: "inventory-hub" },
+  { label: "Data Control", icon: Database, dataControl: true },
   { label: "Supplier Network", icon: Users },
 ];
 
@@ -102,6 +110,13 @@ const actionFilters: { id: ActionFilter; label: string }[] = [
   { id: "critical", label: "Critical" },
   { id: "reorder", label: "Reorders" },
   { id: "excess", label: "Excess" },
+];
+
+const productRiskFilters: { id: ProductRiskFilter; label: string }[] = [
+  { id: "all", label: "All health states" },
+  { id: "Stockout risk", label: "Stockout risk" },
+  { id: "Overstock", label: "Overstock" },
+  { id: "Healthy", label: "Healthy" },
 ];
 
 const requiredColumns = ["date", "product_id", "units_sold", "unit_price"];
@@ -241,6 +256,296 @@ function downloadDraftRegister(drafts: PurchaseOrderDraft[]) {
   URL.revokeObjectURL(url);
 }
 
+function riskOrder(risk: InventoryProduct["risk"]) {
+  if (risk === "Stockout risk") return 0;
+  if (risk === "Overstock") return 1;
+  return 2;
+}
+
+type ProductWorkspaceProps = {
+  products: InventoryProduct[];
+  loading: boolean;
+  categories: string[];
+  categoryFilter: string;
+  riskFilter: ProductRiskFilter;
+  onCategoryChange: (value: string) => void;
+  onRiskChange: (value: ProductRiskFilter) => void;
+  onOpenProduct: (product: InventoryProduct) => void;
+};
+
+function ProductDirectoryWorkspace({
+  products,
+  loading,
+  categories,
+  categoryFilter,
+  riskFilter,
+  onCategoryChange,
+  onRiskChange,
+  onOpenProduct,
+}: ProductWorkspaceProps) {
+  const atRisk = products.filter((product) => product.risk === "Stockout risk").length;
+  const healthy = products.filter((product) => product.risk === "Healthy").length;
+  const averageCover = products.length
+    ? Math.round(products.reduce((total, product) => total + product.days_of_cover, 0) / products.length)
+    : 0;
+
+  return (
+    <section className="catalog-workspace" aria-labelledby="product-directory-heading">
+      <div className="catalog-intro">
+        <div>
+          <span className="eyebrow">Catalog operations</span>
+          <h2 id="product-directory-heading">Product Directory</h2>
+          <p>Search the product catalog, compare inventory signals, and open a SKU decision context.</p>
+        </div>
+        <span className="catalog-count">{products.length} matching SKUs</span>
+      </div>
+
+      <div className="catalog-stat-grid">
+        <article>
+          <span>Total catalog</span>
+          <strong>{products.length}</strong>
+          <small>active SKUs in planning</small>
+        </article>
+        <article className="warning">
+          <span>Stockout risk</span>
+          <strong>{atRisk}</strong>
+          <small>need replenishment review</small>
+        </article>
+        <article>
+          <span>Healthy coverage</span>
+          <strong>{healthy}</strong>
+          <small>SKUs in target range</small>
+        </article>
+        <article>
+          <span>Average cover</span>
+          <strong>{averageCover}d</strong>
+          <small>across this result set</small>
+        </article>
+      </div>
+
+      <section className="catalog-table-surface">
+        <div className="catalog-toolbar">
+          <div>
+            <span className="eyebrow">Filtered inventory catalog</span>
+            <strong>SKU planning profile</strong>
+          </div>
+          <div className="catalog-filters">
+            <label>
+              <span>Category</span>
+              <select value={categoryFilter} onChange={(event) => onCategoryChange(event.target.value)}>
+                <option value="all">All categories</option>
+                {categories.map((category) => (
+                  <option value={category} key={category}>{category}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Health</span>
+              <select
+                value={riskFilter}
+                onChange={(event) => onRiskChange(event.target.value as ProductRiskFilter)}
+              >
+                {productRiskFilters.map((filter) => (
+                  <option value={filter.id} key={filter.id}>{filter.label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+        <div className="catalog-table-scroll">
+          <table className="catalog-table">
+            <thead>
+              <tr>
+                <th>SKU</th>
+                <th>On hand</th>
+                <th>Daily demand</th>
+                <th>Days of cover</th>
+                <th>Reorder point</th>
+                <th>Recommended order</th>
+                <th>Health</th>
+                <th><span className="sr-only">Open SKU</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && (
+                <tr><td colSpan={8} className="catalog-empty">Loading product catalog...</td></tr>
+              )}
+              {!loading && products.length === 0 && (
+                <tr><td colSpan={8} className="catalog-empty">No SKUs match the current search and filters.</td></tr>
+              )}
+              {products.map((product) => {
+                const Icon = productIcons[product.product_id] ?? Box;
+                return (
+                  <tr key={product.product_id}>
+                    <td>
+                      <button className="catalog-product" onClick={() => onOpenProduct(product)}>
+                        <span className="product-icon"><Icon size={19} /></span>
+                        <span><strong>{product.product_name}</strong><small>{product.category}</small></span>
+                      </button>
+                    </td>
+                    <td><strong>{product.current_stock.toLocaleString()}</strong><small>units</small></td>
+                    <td>{product.avg_daily_demand.toLocaleString()} / day</td>
+                    <td><strong>{product.days_of_cover}d</strong></td>
+                    <td>{product.reorder_point.toLocaleString()}</td>
+                    <td>{product.recommended_order > 0 ? product.recommended_order.toLocaleString() : "--"}</td>
+                    <td><span className={`risk-pill ${toStatusClass(product.risk)}`}>{product.risk}</span></td>
+                    <td>
+                      <button className="table-open-button" onClick={() => onOpenProduct(product)} title={`Open ${product.product_name}`}>
+                        <ChevronRight size={17} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  );
+}
+
+function InventoryHubWorkspace({
+  products,
+  loading,
+  categories,
+  categoryFilter,
+  riskFilter,
+  onCategoryChange,
+  onRiskChange,
+  onOpenProduct,
+}: ProductWorkspaceProps) {
+  const atRisk = products.filter((product) => product.risk === "Stockout risk").length;
+  const overstock = products.filter((product) => product.risk === "Overstock").length;
+  const totalStock = products.reduce((total, product) => total + product.current_stock, 0);
+  const recommendedUnits = products.reduce((total, product) => total + product.recommended_order, 0);
+  const sortedProducts = [...products].sort(
+    (left, right) => riskOrder(left.risk) - riskOrder(right.risk) || left.days_of_cover - right.days_of_cover,
+  );
+
+  return (
+    <section className="catalog-workspace inventory-workspace" aria-labelledby="inventory-hub-heading">
+      <div className="catalog-intro">
+        <div>
+          <span className="eyebrow">Inventory operations</span>
+          <h2 id="inventory-hub-heading">Inventory Hub</h2>
+          <p>Review stock positions against reorder points and act on the most urgent coverage gaps.</p>
+        </div>
+        <span className="catalog-count">Prioritized by coverage risk</span>
+      </div>
+
+      <div className="catalog-stat-grid inventory-stat-grid">
+        <article>
+          <span>Units on hand</span>
+          <strong>{totalStock.toLocaleString()}</strong>
+          <small>across visible SKUs</small>
+        </article>
+        <article className="risk">
+          <span>Critical coverage</span>
+          <strong>{atRisk}</strong>
+          <small>SKUs below safe cover</small>
+        </article>
+        <article className="warning">
+          <span>Excess inventory</span>
+          <strong>{overstock}</strong>
+          <small>SKUs worth reviewing</small>
+        </article>
+        <article className="teal">
+          <span>Suggested replenishment</span>
+          <strong>{recommendedUnits.toLocaleString()}</strong>
+          <small>units from current signals</small>
+        </article>
+      </div>
+
+      <section className="catalog-table-surface inventory-table-surface">
+        <div className="catalog-toolbar">
+          <div>
+            <span className="eyebrow">Stock position monitor</span>
+            <strong>Inventory health and replenishment</strong>
+          </div>
+          <div className="catalog-filters">
+            <label>
+              <span>Category</span>
+              <select value={categoryFilter} onChange={(event) => onCategoryChange(event.target.value)}>
+                <option value="all">All categories</option>
+                {categories.map((category) => (
+                  <option value={category} key={category}>{category}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Health</span>
+              <select
+                value={riskFilter}
+                onChange={(event) => onRiskChange(event.target.value as ProductRiskFilter)}
+              >
+                {productRiskFilters.map((filter) => (
+                  <option value={filter.id} key={filter.id}>{filter.label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+        <div className="catalog-table-scroll">
+          <table className="catalog-table inventory-table">
+            <thead>
+              <tr>
+                <th>SKU</th>
+                <th>Stock position</th>
+                <th>Coverage</th>
+                <th>Reorder point</th>
+                <th>Recommended order</th>
+                <th>Health</th>
+                <th><span className="sr-only">Open SKU</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && (
+                <tr><td colSpan={7} className="catalog-empty">Calculating inventory positions...</td></tr>
+              )}
+              {!loading && sortedProducts.length === 0 && (
+                <tr><td colSpan={7} className="catalog-empty">No inventory positions match the current filters.</td></tr>
+              )}
+              {sortedProducts.map((product) => {
+                const Icon = productIcons[product.product_id] ?? Box;
+                const stockPosition = Math.min(
+                  100,
+                  Math.max(8, Math.round((product.current_stock / Math.max(product.reorder_point, 1)) * 100)),
+                );
+                return (
+                  <tr key={product.product_id}>
+                    <td>
+                      <button className="catalog-product" onClick={() => onOpenProduct(product)}>
+                        <span className="product-icon"><Icon size={19} /></span>
+                        <span><strong>{product.product_name}</strong><small>{product.category}</small></span>
+                      </button>
+                    </td>
+                    <td>
+                      <div className="stock-position">
+                        <span><strong>{product.current_stock.toLocaleString()}</strong> / {product.reorder_point.toLocaleString()} units</span>
+                        <i><b className={toStatusClass(product.risk)} style={{ width: `${stockPosition}%` }} /></i>
+                      </div>
+                    </td>
+                    <td><strong>{product.days_of_cover}d</strong><small>{product.avg_daily_demand.toLocaleString()} / day</small></td>
+                    <td>{product.reorder_point.toLocaleString()}</td>
+                    <td>{product.recommended_order > 0 ? <strong>{product.recommended_order.toLocaleString()} units</strong> : "No order"}</td>
+                    <td><span className={`risk-pill ${toStatusClass(product.risk)}`}>{product.risk}</span></td>
+                    <td>
+                      <button className="table-open-button" onClick={() => onOpenProduct(product)} title={`Open ${product.product_name}`}>
+                        <ChevronRight size={17} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  );
+}
+
 function MetricTile({ metric, index }: { metric: DashboardMetric; index: number }) {
   const icons = [Store, PackageCheck, BarChart3, AlertTriangle, CircleGauge];
   const Icon = icons[index] ?? CircleGauge;
@@ -262,6 +567,7 @@ function MetricTile({ metric, index }: { metric: DashboardMetric; index: number 
 
 export function ControlTower({ onExitDemo }: ControlTowerProps) {
   const initialParams = new URLSearchParams(window.location.search);
+  const initialView = initialParams.get("view");
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [products, setProducts] = useState<InventoryProduct[]>([]);
   const [actions, setActions] = useState<ActionRecommendation[]>([]);
@@ -292,6 +598,14 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
     ),
   );
   const [actionFilter, setActionFilter] = useState<ActionFilter>("all");
+  const [activeView, setActiveView] = useState<AppView>(
+    initialView === "product-directory" || initialView === "inventory-hub"
+      ? initialView
+      : "control-tower",
+  );
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [riskFilter, setRiskFilter] = useState<ProductRiskFilter>("all");
   const [drawerOpen, setDrawerOpen] = useState(initialParams.has("sku"));
   const [collapsed, setCollapsed] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -419,6 +733,22 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
     return [...groups.values()];
   }, [products]);
 
+  const categories = useMemo(
+    () => [...new Set(products.map((product) => product.category))].sort(),
+    [products],
+  );
+
+  const filteredProducts = useMemo(() => {
+    const query = catalogSearch.trim().toLowerCase();
+    return products.filter((product) => {
+      const matchesQuery = !query || [product.product_name, product.product_id, product.category]
+        .some((value) => value.toLowerCase().includes(query));
+      const matchesCategory = categoryFilter === "all" || product.category === categoryFilter;
+      const matchesRisk = riskFilter === "all" || product.risk === riskFilter;
+      return matchesQuery && matchesCategory && matchesRisk;
+    });
+  }, [products, catalogSearch, categoryFilter, riskFilter]);
+
   const selectedInventory = products.find(
     (product) => product.product_id === selectedProduct,
   );
@@ -428,13 +758,21 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
   }
 
   const visibleActions = useMemo(() => {
+    const query = catalogSearch.trim().toLowerCase();
     return actions.filter((action) => {
+      const matchesQuery = !query || [
+        action.product_name,
+        action.product_id,
+        action.category,
+        action.title,
+      ].some((value) => value.toLowerCase().includes(query));
+      if (!matchesQuery) return false;
       if (actionFilter === "critical") return action.priority === "Critical";
       if (actionFilter === "reorder") return action.action_type === "reorder";
       if (actionFilter === "excess") return action.action_type === "markdown";
       return true;
     });
-  }, [actions, actionFilter]);
+  }, [actions, actionFilter, catalogSearch]);
 
   const filterCounts = useMemo(
     () => ({
@@ -483,6 +821,23 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
     (mapping) => mapping.mapping_type !== "ignored",
   ) ?? [];
   const modelCandidates = forecast?.model_candidates.slice(0, 3) ?? [];
+  const pageMeta = {
+    "control-tower": {
+      breadcrumb: "Operations / Control Tower",
+      title: "Inventory Control Tower",
+      placeholder: "Search products or actions",
+    },
+    "product-directory": {
+      breadcrumb: "Operations / Product Directory",
+      title: "Product Directory",
+      placeholder: "Search SKU, product, or category",
+    },
+    "inventory-hub": {
+      breadcrumb: "Operations / Inventory Hub",
+      title: "Inventory Hub",
+      placeholder: "Search inventory positions",
+    },
+  }[activeView];
 
   function updateActionStatus(
     actionId: string,
@@ -504,6 +859,32 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
   function focusAction(action: ActionRecommendation) {
     setSelectedProduct(action.product_id);
     setDrawerOpen(true);
+  }
+
+  function focusProduct(product: InventoryProduct) {
+    setSelectedProduct(product.product_id);
+    setDrawerOpen(true);
+  }
+
+  function handleNavigation(item: (typeof navigation)[number]) {
+    if (item.dataControl) {
+      setImportOpen(true);
+      return;
+    }
+    if (item.view) {
+      setActiveView(item.view);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    if (item.anchor) {
+      setActiveView("control-tower");
+      window.setTimeout(() => {
+        document.getElementById(item.anchor ?? "")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 0);
+    }
   }
 
   function clearDecisionWorkflow() {
@@ -632,11 +1013,14 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
           </button>
         </div>
         <nav className="app-navigation" aria-label="Product navigation">
-          {navigation.map(({ label, icon: Icon, active }) => (
+          {navigation.map((item) => {
+            const { label, icon: Icon } = item;
+            const active = item.view === activeView;
+            return (
             <button
               className={active ? "active" : ""}
               key={label}
-              onClick={() => label === "Data Control" && setImportOpen(true)}
+              onClick={() => handleNavigation(item)}
               title={label}
             >
               <Icon size={18} />
@@ -645,7 +1029,8 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
                 <b>{actions.filter((action) => action.priority === "Critical").length}</b>
               )}
             </button>
-          ))}
+            );
+          })}
         </nav>
         <div className="sidebar-bottom">
           <button title="Settings">
@@ -671,13 +1056,18 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
       <main className="control-main">
         <header className="control-header">
           <div>
-            <span className="breadcrumb">Operations / Control Tower</span>
-            <h1>Inventory Control Tower</h1>
+            <span className="breadcrumb">{pageMeta.breadcrumb}</span>
+            <h1>{pageMeta.title}</h1>
           </div>
           <div className="header-tools">
             <label className="command-search">
               <Search size={16} />
-              <input aria-label="Search" placeholder="Search products or actions" />
+              <input
+                aria-label="Search products"
+                value={catalogSearch}
+                onChange={(event) => setCatalogSearch(event.target.value)}
+                placeholder={pageMeta.placeholder}
+              />
               <kbd>Ctrl K</kbd>
             </label>
             <button className="icon-command" title="Notifications">
@@ -725,8 +1115,36 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
           </div>
         )}
 
+        {activeView === "product-directory" && (
+          <ProductDirectoryWorkspace
+            products={filteredProducts}
+            loading={loading}
+            categories={categories}
+            categoryFilter={categoryFilter}
+            riskFilter={riskFilter}
+            onCategoryChange={setCategoryFilter}
+            onRiskChange={setRiskFilter}
+            onOpenProduct={focusProduct}
+          />
+        )}
+
+        {activeView === "inventory-hub" && (
+          <InventoryHubWorkspace
+            products={filteredProducts}
+            loading={loading}
+            categories={categories}
+            categoryFilter={categoryFilter}
+            riskFilter={riskFilter}
+            onCategoryChange={setCategoryFilter}
+            onRiskChange={setRiskFilter}
+            onOpenProduct={focusProduct}
+          />
+        )}
+
+        {activeView === "control-tower" && (
+          <>
         <section className="decision-workspace">
-          <div className="action-panel">
+          <div className="action-panel" id="action-center">
             <div className="panel-heading">
               <div>
                 <span className="eyebrow">Prioritized by operational risk</span>
@@ -1185,6 +1603,8 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
             </div>
           </div>
         </section>
+          </>
+        )}
       </main>
 
       {drawerOpen && selectedInventory && (

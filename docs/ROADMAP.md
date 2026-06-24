@@ -30,6 +30,8 @@
 - [x] Integrated scenario forecast curve and AI insight
 - [x] Draft Purchase Order generation and CSV export
 - [x] Collapsible desktop and compact mobile navigation
+- [x] Product Directory with SKU search, category filters, and health filters
+- [x] Inventory Hub with stock positions, reorder-point comparison, and risk prioritization
 
 ## Sprint 4 - Decision Workflow
 

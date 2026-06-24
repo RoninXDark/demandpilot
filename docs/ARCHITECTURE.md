@@ -21,6 +21,8 @@ The v0.4 decision workflow adds local UI lifecycle states for recommendations: O
 
 SKU detail drawers are frontend composition over existing API contracts: product inventory, active recommendation, forecast validation, and scenario insight. The drawer can be deep-linked with `?sku=<product_id>` for portfolio walkthroughs.
 
+The v0.7 Product Directory and Inventory Hub reuse the typed `/products` inventory contract rather than introducing duplicate catalog state. Both views share planner search and category/health filters, and each SKU drills into the same decision drawer. This keeps the product's catalog and operational risk views consistent after a dataset activation.
+
 ## Forecasting Baseline
 
 The current baseline evaluates three transparent candidates:

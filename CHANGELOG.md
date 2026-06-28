@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.0 - Portfolio MVP Release
+
+- Completed the portfolio-ready product surface with Supplier Network and Scenario Comparison
+- Added working Supplier Network navigation with supplier reliability, lead-time, MOQ, and SKU lane views
+- Added saved scenario comparison cards for demand change, projected revenue, recommended order, and risk state
+- Added apply-back controls so saved scenarios can restore product, horizon, price, promotion, and lead-time settings
+- Added seeded planning scenarios for the first demo session while keeping user-created scenarios in local storage
+- Updated the application and API version to 1.0.0
+- Updated documentation to present DemandPilot as a complete MVP with a clear future roadmap
+
 ## 0.7.0 - Product Directory and Inventory Hub
 
 - Added working Product Directory and Inventory Hub views to the application navigation

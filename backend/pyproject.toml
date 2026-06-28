@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "demandpilot-api"
-version = "0.7.0"
+version = "1.0.0"
 description = "Demand forecasting and inventory optimization API"
 requires-python = ">=3.11"
 dependencies = [

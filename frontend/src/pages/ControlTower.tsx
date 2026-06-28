@@ -8,6 +8,8 @@ import {
   Bell,
   Box,
   Boxes,
+  Building2,
+  CalendarClock,
   Check,
   ChevronRight,
   CircleGauge,
@@ -18,22 +20,27 @@ import {
   FileDown,
   FileSpreadsheet,
   Gauge,
+  GitCompareArrows,
   Headphones,
   Keyboard,
   Laptop,
   LayoutDashboard,
   ListChecks,
+  MapPinned,
   Monitor,
   PackageCheck,
   PanelLeftClose,
   PanelLeftOpen,
   RefreshCw,
+  Save,
   Search,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
   Store,
+  Trash2,
+  Truck,
   Upload,
   Users,
   Video,
@@ -73,10 +80,46 @@ type ControlTowerProps = {
   onExitDemo: () => void;
 };
 
-type AppView = "control-tower" | "product-directory" | "inventory-hub";
+type AppView = "control-tower" | "product-directory" | "inventory-hub" | "supplier-network";
 type ActionFilter = "all" | "critical" | "reorder" | "excess";
 type ActionLifecycleStatus = "Open" | "Draft created" | "Reviewed" | "Dismissed";
 type ProductRiskFilter = "all" | InventoryProduct["risk"];
+type SupplierStatus = "On track" | "Watch" | "Constrained";
+
+type ScenarioSnapshot = {
+  id: string;
+  label: string;
+  productId: string;
+  productName: string;
+  createdAt: string;
+  horizon: number;
+  priceChangePct: number;
+  promotionLiftPct: number;
+  leadTimeDays: number;
+  baselineUnits: number;
+  scenarioUnits: number;
+  projectedRevenue: number;
+  demandChangePct: number;
+  recommendedOrder: number;
+  risk: string;
+};
+
+type SupplierPartner = {
+  id: string;
+  name: string;
+  region: string;
+  manager: string;
+  contract: string;
+  reliabilityPct: number;
+  leadTimeDays: number;
+  minimumOrderQty: number;
+  status: SupplierStatus;
+  products: InventoryProduct[];
+  openActions: ActionRecommendation[];
+  openRisk: number;
+  recommendedUnits: number;
+  nextAction: string;
+};
 
 const horizons = [7, 30, 90];
 
@@ -93,7 +136,7 @@ const navigation: {
   { label: "Product Directory", icon: Box, view: "product-directory" },
   { label: "Inventory Hub", icon: Boxes, view: "inventory-hub" },
   { label: "Data Control", icon: Database, dataControl: true },
-  { label: "Supplier Network", icon: Users },
+  { label: "Supplier Network", icon: Users, view: "supplier-network" },
 ];
 
 const productIcons: Record<string, LucideIcon> = {
@@ -104,6 +147,138 @@ const productIcons: Record<string, LucideIcon> = {
   webcam: Video,
   headset: Headphones,
 };
+
+const supplierProfiles: Record<
+  string,
+  {
+    name: string;
+    region: string;
+    manager: string;
+    contract: string;
+    reliabilityPct: number;
+    leadTimeDays: number;
+    minimumOrderQty: number;
+  }
+> = {
+  laptop: {
+    name: "Aster Components",
+    region: "EU distribution",
+    manager: "Marta Novak",
+    contract: "Quarterly capacity reserve",
+    reliabilityPct: 92,
+    leadTimeDays: 8,
+    minimumOrderQty: 400,
+  },
+  monitor: {
+    name: "Aster Components",
+    region: "EU distribution",
+    manager: "Marta Novak",
+    contract: "Quarterly capacity reserve",
+    reliabilityPct: 92,
+    leadTimeDays: 14,
+    minimumOrderQty: 240,
+  },
+  dock: {
+    name: "NorthDock Logistics",
+    region: "Central Europe",
+    manager: "Piotr Zielinski",
+    contract: "Monthly replenishment lane",
+    reliabilityPct: 86,
+    leadTimeDays: 7,
+    minimumOrderQty: 180,
+  },
+  keyboard: {
+    name: "NorthDock Logistics",
+    region: "Central Europe",
+    manager: "Piotr Zielinski",
+    contract: "Monthly replenishment lane",
+    reliabilityPct: 86,
+    leadTimeDays: 9,
+    minimumOrderQty: 300,
+  },
+  webcam: {
+    name: "ClearView Optics",
+    region: "Asia consolidation",
+    manager: "Ewa Kowalska",
+    contract: "Expedited shortage coverage",
+    reliabilityPct: 78,
+    leadTimeDays: 10,
+    minimumOrderQty: 220,
+  },
+  headset: {
+    name: "ClearView Optics",
+    region: "Asia consolidation",
+    manager: "Ewa Kowalska",
+    contract: "Expedited shortage coverage",
+    reliabilityPct: 78,
+    leadTimeDays: 12,
+    minimumOrderQty: 260,
+  },
+};
+
+const defaultSupplierProfile = {
+  name: "Unassigned Supplier",
+  region: "Needs sourcing owner",
+  manager: "Operations team",
+  contract: "Manual review",
+  reliabilityPct: 72,
+  leadTimeDays: 14,
+  minimumOrderQty: 100,
+};
+
+const defaultScenarioSnapshots: ScenarioSnapshot[] = [
+  {
+    id: "demo-promo-laptop",
+    label: "Promotion lift stress test",
+    productId: "laptop",
+    productName: "Aster Pro Laptop",
+    createdAt: "2026-06-17T09:00:00Z",
+    horizon: 30,
+    priceChangePct: 0,
+    promotionLiftPct: 35,
+    leadTimeDays: 9,
+    baselineUnits: 1254,
+    scenarioUnits: 1693,
+    projectedRevenue: 2030000,
+    demandChangePct: 35,
+    recommendedOrder: 1590,
+    risk: "Stockout risk",
+  },
+  {
+    id: "demo-delay-webcam",
+    label: "Supplier delay buffer",
+    productId: "webcam",
+    productName: "ClearView Webcam",
+    createdAt: "2026-06-17T09:15:00Z",
+    horizon: 30,
+    priceChangePct: 0,
+    promotionLiftPct: 18,
+    leadTimeDays: 14,
+    baselineUnits: 525,
+    scenarioUnits: 620,
+    projectedRevenue: 67580,
+    demandChangePct: 18,
+    recommendedOrder: 716,
+    risk: "Stockout risk",
+  },
+  {
+    id: "demo-markdown-keyboard",
+    label: "Markdown recovery",
+    productId: "keyboard",
+    productName: "TypeOne Keyboard",
+    createdAt: "2026-06-17T09:30:00Z",
+    horizon: 30,
+    priceChangePct: -10,
+    promotionLiftPct: 12,
+    leadTimeDays: 7,
+    baselineUnits: 561,
+    scenarioUnits: 701,
+    projectedRevenue: 56150,
+    demandChangePct: 25,
+    recommendedOrder: 0,
+    risk: "Healthy",
+  },
+];
 
 const actionFilters: { id: ActionFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -176,6 +351,22 @@ function formatDate(value: string) {
     month: "short",
     day: "numeric",
   }).format(new Date(`${value}T12:00:00`));
+}
+
+function formatCompactNumber(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    notation: value > 9999 ? "compact" : "standard",
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+function formatCompactCurrency(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
 }
 
 function formatPreviewValue(value: string | number | null) {
@@ -260,6 +451,72 @@ function riskOrder(risk: InventoryProduct["risk"]) {
   if (risk === "Stockout risk") return 0;
   if (risk === "Overstock") return 1;
   return 2;
+}
+
+function buildSupplierPartners(
+  products: InventoryProduct[],
+  actions: ActionRecommendation[],
+): SupplierPartner[] {
+  const partners = new Map<string, SupplierPartner>();
+
+  for (const product of products) {
+    const profile = supplierProfiles[product.product_id] ?? defaultSupplierProfile;
+    const productActions = actions.filter(
+      (action) => action.product_id === product.product_id,
+    );
+    const existing =
+      partners.get(profile.name) ??
+      ({
+        id: profile.name.toLowerCase().replaceAll(" ", "-"),
+        name: profile.name,
+        region: profile.region,
+        manager: profile.manager,
+        contract: profile.contract,
+        reliabilityPct: profile.reliabilityPct,
+        leadTimeDays: profile.leadTimeDays,
+        minimumOrderQty: profile.minimumOrderQty,
+        status: "On track",
+        products: [],
+        openActions: [],
+        openRisk: 0,
+        recommendedUnits: 0,
+        nextAction: "Monitor demand signals",
+      } satisfies SupplierPartner);
+
+    existing.products.push(product);
+    existing.openActions.push(...productActions);
+    existing.openRisk += product.risk === "Stockout risk" ? 1 : 0;
+    existing.recommendedUnits += product.recommended_order;
+    existing.leadTimeDays = Math.round(
+      (existing.leadTimeDays * Math.max(existing.products.length - 1, 0) +
+        profile.leadTimeDays) /
+        existing.products.length,
+    );
+    existing.minimumOrderQty = Math.max(existing.minimumOrderQty, profile.minimumOrderQty);
+    partners.set(profile.name, existing);
+  }
+
+  return [...partners.values()]
+    .map((partner) => {
+      let status: SupplierStatus = "On track";
+      if (partner.openRisk > 0 && partner.reliabilityPct < 85) status = "Constrained";
+      else if (partner.openRisk > 0 || partner.recommendedUnits > partner.minimumOrderQty) status = "Watch";
+
+      const nextAction =
+        status === "Constrained"
+          ? "Escalate capacity and confirm expedited dates"
+          : partner.recommendedUnits > 0
+            ? "Bundle open replenishment into the next supplier PO"
+            : "Keep normal replenishment cadence";
+
+      return { ...partner, status, nextAction };
+    })
+    .sort(
+      (left, right) =>
+        (right.openRisk - left.openRisk) ||
+        (right.recommendedUnits - left.recommendedUnits) ||
+        left.name.localeCompare(right.name),
+    );
 }
 
 type ProductWorkspaceProps = {
@@ -546,6 +803,281 @@ function InventoryHubWorkspace({
   );
 }
 
+type ScenarioComparisonProps = {
+  snapshots: ScenarioSnapshot[];
+  onApply: (snapshot: ScenarioSnapshot) => void;
+  onRemove: (id: string) => void;
+  onClear: () => void;
+};
+
+function ScenarioComparison({
+  snapshots,
+  onApply,
+  onRemove,
+  onClear,
+}: ScenarioComparisonProps) {
+  return (
+    <section className="scenario-comparison" aria-labelledby="scenario-comparison-heading">
+      <div className="scenario-comparison-heading">
+        <div>
+          <span className="eyebrow">Scenario comparison</span>
+          <h3 id="scenario-comparison-heading">
+            <GitCompareArrows size={16} />
+            Saved planning options
+          </h3>
+        </div>
+        {snapshots.length > 0 && (
+          <button className="button-quiet danger compact-text" onClick={onClear}>
+            <Trash2 size={14} />
+            Clear
+          </button>
+        )}
+      </div>
+
+      {snapshots.length === 0 ? (
+        <div className="scenario-empty">
+          <GitCompareArrows size={23} />
+          <strong>No saved scenarios yet</strong>
+          <span>Adjust Scenario Lab and save the current option to compare order impact.</span>
+        </div>
+      ) : (
+        <div className="scenario-comparison-grid">
+          {snapshots.map((snapshot) => {
+            const delta = snapshot.scenarioUnits - snapshot.baselineUnits;
+            const maxUnits = Math.max(snapshot.scenarioUnits, snapshot.baselineUnits, 1);
+            return (
+              <article className="scenario-card" key={snapshot.id}>
+                <header>
+                  <div>
+                    <strong>{snapshot.label}</strong>
+                    <span>{snapshot.productName}</span>
+                  </div>
+                  <em className={`risk-pill ${toStatusClass(snapshot.risk)}`}>
+                    {snapshot.risk}
+                  </em>
+                </header>
+                <div className="scenario-card-metrics">
+                  <div>
+                    <span>Demand change</span>
+                    <strong className={snapshot.demandChangePct >= 0 ? "impact-up" : "impact-down"}>
+                      {snapshot.demandChangePct > 0 ? "+" : ""}
+                      {snapshot.demandChangePct}%
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Order</span>
+                    <strong>{formatCompactNumber(snapshot.recommendedOrder)}</strong>
+                  </div>
+                  <div>
+                    <span>Revenue</span>
+                    <strong>{formatCompactCurrency(snapshot.projectedRevenue)}</strong>
+                  </div>
+                </div>
+                <div className="scenario-bars" aria-label="Scenario demand comparison">
+                  <span>
+                    <i style={{ width: `${Math.max(8, (snapshot.baselineUnits / maxUnits) * 100)}%` }} />
+                    Baseline {formatCompactNumber(snapshot.baselineUnits)}
+                  </span>
+                  <span>
+                    <i className="scenario" style={{ width: `${Math.max(8, (snapshot.scenarioUnits / maxUnits) * 100)}%` }} />
+                    Scenario {formatCompactNumber(snapshot.scenarioUnits)}
+                  </span>
+                </div>
+                <footer>
+                  <span>
+                    <CalendarClock size={13} />
+                    {formatDate(snapshot.createdAt.slice(0, 10))} - {snapshot.horizon}d
+                  </span>
+                  <span>{delta >= 0 ? "+" : ""}{formatCompactNumber(delta)} units</span>
+                </footer>
+                <div className="scenario-card-actions">
+                  <button onClick={() => onApply(snapshot)}>Apply</button>
+                  <button
+                    className="icon-command"
+                    onClick={() => onRemove(snapshot.id)}
+                    title="Remove scenario"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+type SupplierNetworkWorkspaceProps = {
+  products: InventoryProduct[];
+  actions: ActionRecommendation[];
+  loading: boolean;
+  onOpenProduct: (product: InventoryProduct) => void;
+};
+
+function SupplierNetworkWorkspace({
+  products,
+  actions,
+  loading,
+  onOpenProduct,
+}: SupplierNetworkWorkspaceProps) {
+  const partners = useMemo(
+    () => buildSupplierPartners(products, actions),
+    [products, actions],
+  );
+  const averageReliability = partners.length
+    ? Math.round(partners.reduce((total, partner) => total + partner.reliabilityPct, 0) / partners.length)
+    : 0;
+  const constrained = partners.filter((partner) => partner.status === "Constrained").length;
+  const recommendedUnits = partners.reduce((total, partner) => total + partner.recommendedUnits, 0);
+  const lanes = partners.flatMap((partner) =>
+    partner.products.map((product) => ({ partner, product })),
+  ).sort(
+    (left, right) =>
+      riskOrder(left.product.risk) - riskOrder(right.product.risk) ||
+      right.product.recommended_order - left.product.recommended_order,
+  );
+
+  return (
+    <section className="catalog-workspace supplier-workspace" aria-labelledby="supplier-network-heading">
+      <div className="catalog-intro">
+        <div>
+          <span className="eyebrow">Supplier operations</span>
+          <h2 id="supplier-network-heading">Supplier Network</h2>
+          <p>Connect replenishment decisions to supplier capacity, reliability, lead times, and order lanes.</p>
+        </div>
+        <span className="catalog-count">{partners.length} supplier partners</span>
+      </div>
+
+      <div className="catalog-stat-grid supplier-stat-grid">
+        <article>
+          <span>Supplier partners</span>
+          <strong>{partners.length}</strong>
+          <small>linked to active SKUs</small>
+        </article>
+        <article className="teal">
+          <span>Avg reliability</span>
+          <strong>{averageReliability}%</strong>
+          <small>portfolio service signal</small>
+        </article>
+        <article className={constrained ? "risk" : ""}>
+          <span>Constrained lanes</span>
+          <strong>{constrained}</strong>
+          <small>need escalation</small>
+        </article>
+        <article className="warning">
+          <span>Suggested PO units</span>
+          <strong>{formatCompactNumber(recommendedUnits)}</strong>
+          <small>from current inventory state</small>
+        </article>
+      </div>
+
+      <div className="supplier-grid">
+        <section className="supplier-board" aria-label="Supplier readiness board">
+          <div className="supplier-section-heading">
+            <div>
+              <span className="eyebrow">Readiness board</span>
+              <strong>Partner capacity and service health</strong>
+            </div>
+            <Truck size={18} />
+          </div>
+          {loading && <div className="catalog-empty">Loading supplier network...</div>}
+          {!loading && partners.map((partner) => (
+            <article className={`supplier-card status-${toStatusClass(partner.status)}`} key={partner.id}>
+              <header>
+                <span className="supplier-icon"><Building2 size={19} /></span>
+                <div>
+                  <strong>{partner.name}</strong>
+                  <span><MapPinned size={12} /> {partner.region}</span>
+                </div>
+                <em>{partner.status}</em>
+              </header>
+              <div className="supplier-card-grid">
+                <div>
+                  <span>Reliability</span>
+                  <strong>{partner.reliabilityPct}%</strong>
+                </div>
+                <div>
+                  <span>Lead time</span>
+                  <strong>{partner.leadTimeDays}d</strong>
+                </div>
+                <div>
+                  <span>Open risk</span>
+                  <strong>{partner.openRisk}</strong>
+                </div>
+                <div>
+                  <span>Suggested PO</span>
+                  <strong>{formatCompactNumber(partner.recommendedUnits)}</strong>
+                </div>
+              </div>
+              <div className="supplier-progress">
+                <span>
+                  <i style={{ width: `${partner.reliabilityPct}%` }} />
+                </span>
+                <b>{partner.contract}</b>
+              </div>
+              <footer>
+                <span>{partner.manager}</span>
+                <strong>{partner.nextAction}</strong>
+              </footer>
+            </article>
+          ))}
+        </section>
+
+        <section className="supplier-lanes" aria-label="Supplier replenishment lanes">
+          <div className="supplier-section-heading">
+            <div>
+              <span className="eyebrow">Replenishment lanes</span>
+              <strong>SKU to supplier action map</strong>
+            </div>
+            <PackageCheck size={18} />
+          </div>
+          <div className="supplier-lane-list">
+            {loading && <div className="catalog-empty">Calculating supplier lanes...</div>}
+            {!loading && lanes.map(({ partner, product }) => {
+              const Icon = productIcons[product.product_id] ?? Box;
+              const action = actions.find((item) => item.product_id === product.product_id);
+              return (
+                <article className="supplier-lane" key={`${partner.id}-${product.product_id}`}>
+                  <button className="supplier-lane-product" onClick={() => onOpenProduct(product)}>
+                    <span className="product-icon"><Icon size={18} /></span>
+                    <span>
+                      <strong>{product.product_name}</strong>
+                      <small>{partner.name}</small>
+                    </span>
+                  </button>
+                  <span className={`risk-pill ${toStatusClass(product.risk)}`}>
+                    {product.risk}
+                  </span>
+                  <dl>
+                    <div>
+                      <dt>Cover</dt>
+                      <dd>{product.days_of_cover}d</dd>
+                    </div>
+                    <div>
+                      <dt>MOQ</dt>
+                      <dd>{partner.minimumOrderQty.toLocaleString()}</dd>
+                    </div>
+                    <div>
+                      <dt>Suggested</dt>
+                      <dd>{product.recommended_order.toLocaleString()}</dd>
+                    </div>
+                  </dl>
+                  <button className="table-open-button" onClick={() => onOpenProduct(product)} title={`Open ${product.product_name}`}>
+                    <ChevronRight size={17} />
+                  </button>
+                  <p>{action?.title ?? "No immediate supplier action required."}</p>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      </div>
+    </section>
+  );
+}
+
 function MetricTile({ metric, index }: { metric: DashboardMetric; index: number }) {
   const icons = [Store, PackageCheck, BarChart3, AlertTriangle, CircleGauge];
   const Icon = icons[index] ?? CircleGauge;
@@ -589,6 +1121,12 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
       {},
     ),
   );
+  const [savedScenarios, setSavedScenarios] = useState<ScenarioSnapshot[]>(() =>
+    readStoredRecord<ScenarioSnapshot[]>(
+      "demandpilot-scenario-snapshots",
+      defaultScenarioSnapshots,
+    ),
+  );
   const [actionStates, setActionStates] = useState<
     Record<string, ActionLifecycleStatus>
   >(() =>
@@ -599,7 +1137,9 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
   );
   const [actionFilter, setActionFilter] = useState<ActionFilter>("all");
   const [activeView, setActiveView] = useState<AppView>(
-    initialView === "product-directory" || initialView === "inventory-hub"
+    initialView === "product-directory" ||
+      initialView === "inventory-hub" ||
+      initialView === "supplier-network"
       ? initialView
       : "control-tower",
   );
@@ -655,6 +1195,10 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
   useEffect(() => {
     saveStoredRecord("demandpilot-draft-pos", drafts);
   }, [drafts]);
+
+  useEffect(() => {
+    saveStoredRecord("demandpilot-scenario-snapshots", savedScenarios);
+  }, [savedScenarios]);
 
   useEffect(() => {
     saveStoredRecord("demandpilot-action-states", actionStates);
@@ -837,6 +1381,11 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
       title: "Inventory Hub",
       placeholder: "Search inventory positions",
     },
+    "supplier-network": {
+      breadcrumb: "Operations / Supplier Network",
+      title: "Supplier Network",
+      placeholder: "Search supplier SKUs or actions",
+    },
   }[activeView];
 
   function updateActionStatus(
@@ -854,6 +1403,52 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to create draft");
     }
+  }
+
+  function saveScenarioSnapshot() {
+    if (!scenario || !selectedInventory) return;
+    const labelParts = [
+      priceChange === 0 ? "Base price" : `${priceChange > 0 ? "+" : ""}${priceChange}% price`,
+      promotionLift === 0 ? "no promo" : `+${promotionLift}% promo`,
+      `${leadTime}d lead`,
+    ];
+    const snapshot: ScenarioSnapshot = {
+      id: `${selectedProduct}-${Date.now()}`,
+      label: labelParts.join(" / "),
+      productId: selectedProduct,
+      productName: selectedInventory.product_name,
+      createdAt: new Date().toISOString(),
+      horizon,
+      priceChangePct: priceChange,
+      promotionLiftPct: promotionLift,
+      leadTimeDays: leadTime,
+      baselineUnits: scenario.baseline_units,
+      scenarioUnits: scenario.scenario_units,
+      projectedRevenue: scenario.projected_revenue,
+      demandChangePct: scenario.demand_change_pct,
+      recommendedOrder: scenario.recommended_order,
+      risk: scenario.risk,
+    };
+    setSavedScenarios((current) => [snapshot, ...current].slice(0, 6));
+  }
+
+  function applyScenarioSnapshot(snapshot: ScenarioSnapshot) {
+    setActiveView("control-tower");
+    setSelectedProduct(snapshot.productId);
+    setHorizon(snapshot.horizon);
+    setPriceChange(snapshot.priceChangePct);
+    setPromotionLift(snapshot.promotionLiftPct);
+    setLeadTime(snapshot.leadTimeDays);
+    window.setTimeout(() => {
+      document.getElementById("forecast-workspace")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 0);
+  }
+
+  function removeScenarioSnapshot(id: string) {
+    setSavedScenarios((current) => current.filter((snapshot) => snapshot.id !== id));
   }
 
   function focusAction(action: ActionRecommendation) {
@@ -1141,6 +1736,15 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
           />
         )}
 
+        {activeView === "supplier-network" && (
+          <SupplierNetworkWorkspace
+            products={filteredProducts}
+            actions={actions}
+            loading={loading}
+            onOpenProduct={focusProduct}
+          />
+        )}
+
         {activeView === "control-tower" && (
           <>
         <section className="decision-workspace">
@@ -1377,19 +1981,26 @@ export function ControlTower({ onExitDemo }: ControlTowerProps) {
                 <div className="scenario-output secondary">
                   <span>Projected revenue</span>
                   <strong>
-                    {scenario
-                      ? new Intl.NumberFormat("en-US", {
-                          style: "currency",
-                          currency: "USD",
-                          notation: "compact",
-                          maximumFractionDigits: 1,
-                        }).format(scenario.projected_revenue)
-                      : "--"}
+                    {scenario ? formatCompactCurrency(scenario.projected_revenue) : "--"}
                   </strong>
                   <small>{scenario?.risk ?? "Planning window"}</small>
                 </div>
+                <button
+                  className="scenario-save-button"
+                  onClick={saveScenarioSnapshot}
+                  disabled={!scenario || scenarioLoading}
+                >
+                  <Save size={15} />
+                  Save scenario
+                </button>
               </aside>
             </div>
+            <ScenarioComparison
+              snapshots={savedScenarios}
+              onApply={applyScenarioSnapshot}
+              onRemove={removeScenarioSnapshot}
+              onClear={() => setSavedScenarios([])}
+            />
           </div>
         </section>
 

@@ -23,6 +23,8 @@ SKU detail drawers are frontend composition over existing API contracts: product
 
 The v0.7 Product Directory and Inventory Hub reuse the typed `/products` inventory contract rather than introducing duplicate catalog state. Both views share planner search and category/health filters, and each SKU drills into the same decision drawer. This keeps the product's catalog and operational risk views consistent after a dataset activation.
 
+The v1.0 portfolio layer adds two workflow surfaces on top of the same product, action, forecast, and scenario contracts. Scenario Comparison stores planner-selected scenario snapshots in browser storage for the demo and lets users apply the saved assumptions back to the live Scenario Lab controls. Supplier Network composes supplier readiness from SKU-level inventory state, open actions, reliability profiles, lead-time expectations, and minimum order quantities. These are frontend workflow views today; durable supplier master data and scenario audit trails belong in the next persistence boundary.
+
 ## Forecasting Baseline
 
 The current baseline evaluates three transparent candidates:

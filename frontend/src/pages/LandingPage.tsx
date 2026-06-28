@@ -8,6 +8,7 @@ import {
   Menu,
   PackageCheck,
   Sparkles,
+  Users,
 } from "lucide-react";
 
 type LandingPageProps = {
@@ -57,8 +58,9 @@ export function LandingPage({ onOpenDemo }: LandingPageProps) {
               Turn sales data into inventory decisions.
             </p>
             <p className="hero-summary">
-              Forecast demand, expose stock risk, and move every replenishment
-              decision into one focused operational queue.
+              Forecast demand, compare planning scenarios, expose stock risk,
+              and move every replenishment decision into one focused operational
+              queue.
             </p>
             <div className="hero-actions">
               <button className="button-solid" onClick={onOpenDemo}>
@@ -113,8 +115,8 @@ export function LandingPage({ onOpenDemo }: LandingPageProps) {
               </span>
               <h3>Model the demand</h3>
               <p>
-                Compare baseline demand with price, promotion, and supplier
-                lead-time scenarios in seconds.
+                Compare baseline demand with saved price, promotion, and
+                supplier lead-time scenarios in seconds.
               </p>
             </article>
             <article>
@@ -196,6 +198,9 @@ export function LandingPage({ onOpenDemo }: LandingPageProps) {
               </li>
               <li>
                 <PackageCheck size={18} /> Reorders become exportable Draft POs.
+              </li>
+              <li>
+                <Users size={18} /> Supplier lanes show reliability and lead-time risk.
               </li>
             </ul>
             <button className="button-solid dark" onClick={onOpenDemo}>

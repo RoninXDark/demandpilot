@@ -1,5 +1,16 @@
 # Product Roadmap
 
+## Portfolio MVP - v1.0
+
+- [x] Landing page, Control Tower, and decision-first dashboard
+- [x] Demand forecasting with model validation
+- [x] Scenario Lab with saved scenario comparison
+- [x] Action Queue, SKU drawer, Draft PO workflow, and CSV export
+- [x] Data Control with staged dataset lifecycle
+- [x] Product Directory and Inventory Hub
+- [x] Supplier Network with readiness, lead-time, MOQ, and SKU lane views
+- [x] Backend tests, frontend production build, Docker configuration, and CI
+
 ## Sprint 1 - Working Product Foundation
 
 - [x] FastAPI service and OpenAPI documentation
@@ -32,6 +43,7 @@
 - [x] Collapsible desktop and compact mobile navigation
 - [x] Product Directory with SKU search, category filters, and health filters
 - [x] Inventory Hub with stock positions, reorder-point comparison, and risk prioritization
+- [x] Supplier Network with partner readiness and replenishment lanes
 
 ## Sprint 4 - Decision Workflow
 
@@ -81,5 +93,6 @@
 - [ ] Authentication, teams, and role-based access
 - [ ] Scheduled reports and email/Telegram alerts
 - [ ] AI analyst grounded in calculated metrics
-- [ ] Scenario comparison and decision audit trail
+- [x] Scenario comparison
+- [ ] Decision audit trail
 - [ ] Cloud deployment, monitoring, and public demo

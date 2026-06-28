@@ -2,7 +2,7 @@
 
 AI-powered inventory decision platform for e-commerce and operations teams.
 
-DemandPilot turns sales history into a prioritized queue of replenishment and inventory actions. It combines transparent demand forecasting, scenario simulation, stock-risk detection, data-quality controls, and exportable Draft Purchase Orders in one operational workspace.
+DemandPilot turns sales history into a prioritized queue of replenishment and inventory actions. It combines transparent demand forecasting, scenario simulation, supplier readiness, stock-risk detection, data-quality controls, and exportable Draft Purchase Orders in one operational workspace.
 
 ![DemandPilot landing page](docs/assets/landing-preview.png)
 
@@ -16,6 +16,8 @@ Retail teams often plan inventory in spreadsheets after stockouts or excess inve
 - Detect products at risk of stockout or overstock
 - Calculate safety stock, reorder points, and suggested order quantities
 - Simulate price, promotion, and supplier lead-time changes directly on the forecast
+- Save and compare scenario options before committing to an order plan
+- Connect SKU decisions to supplier reliability, lead times, and replenishment lanes
 - Convert replenishment recommendations into downloadable Draft PO files
 - Review, dismiss, and track recommendation status through a lightweight workflow
 - Open SKU-level decision context with inventory, forecast, and AI rationale
@@ -23,7 +25,7 @@ Retail teams often plan inventory in spreadsheets after stockouts or excess inve
 - Monitor stock position, days of cover, and replenishment needs in the Inventory Hub
 - Expose every calculation through a documented REST API
 
-## Current Product
+## Current Product - Portfolio v1.0
 
 ## Inventory Control Tower
 
@@ -38,6 +40,8 @@ The repository currently contains:
 - A SKU detail drawer with stock, cover, reorder point, forecast accuracy, and action rationale
 - Product Directory with live SKU search, category and health filters, and decision-context drill-down
 - Inventory Hub that prioritizes stock positions by coverage risk and visualizes stock against reorder points
+- Scenario Comparison with saved planning options, apply-back controls, and demand/order/revenue impact
+- Supplier Network with supplier reliability, lead-time health, MOQ context, and SKU-to-supplier lanes
 - A simplified Draft Purchase Order Center with CSV export
 - A deterministic retail dataset generator
 - Daily sales aggregation and KPI calculations
@@ -82,6 +86,18 @@ The v0.7 catalog layer turns the navigation into practical planner views instead
 4. Use the Inventory Hub to prioritize stockout risk, compare on-hand stock to reorder points, and see suggested replenishment units.
 
 Both views are composed from the live `/products` API contract, so they update when a validated dataset becomes active.
+
+## Scenario Comparison and Supplier Network
+
+The v1.0 release closes the portfolio MVP by turning analysis into an operating workflow:
+
+1. Scenario Lab can save planning options from the current price, promotion, lead-time, product, and horizon settings.
+2. Saved scenarios compare baseline demand, scenario demand, projected revenue, recommended order quantity, and risk state.
+3. Any saved scenario can be applied back to the forecast controls for fast planner review.
+4. Supplier Network maps active SKUs to supplier readiness, reliability, minimum order quantities, lead times, and open replenishment lanes.
+5. Supplier rows stay connected to the same SKU decision drawer used by Action Queue, Product Directory, and Inventory Hub.
+
+This keeps the product credible: DemandPilot is a decision platform that can recommend, compare, stage, and explain inventory actions without pretending to replace a full ERP.
 
 ## Decision Workflow
 
@@ -185,4 +201,4 @@ Release history is documented in [CHANGELOG.md](CHANGELOG.md).
 ## Repository Name and Description
 
 **Name:** `demandpilot`
-**GitHub description:** `AI-powered inventory decision platform with Product Directory, Inventory Hub, dataset lifecycle, forecasting, and Draft PO workflow.`
+**GitHub description:** `AI-powered inventory control tower with forecasting, scenario comparison, supplier network, dataset lifecycle, and Draft PO workflow.`
